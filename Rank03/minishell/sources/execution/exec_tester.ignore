@@ -1,0 +1,1699 @@
+# include <unistd.h>
+# include <stdlib.h>
+# include <fcntl.h>
+# include <limits.h>
+# include <stdio.h>
+# include <sys/types.h>
+# include <sys/wait.h>
+# include <signal.h>
+# include <readline/readline.h>
+# include <readline/history.h>
+#  include <readline/rlstdc.h>
+#  include <readline/rltypedefs.h>
+#  include <readline/keymaps.h>
+#  include <readline/tilde.h>
+# include <stdarg.h>
+
+/* ===== MINIMAL AST BUILDERS ===== */
+
+typedef struct s_env
+{
+	char	**envp;			/* Array of environment variables (KEY=VALUE) */
+	int		exit_status;	/* Last command exit status ($?) */
+	int		should_exit;	/* Flag to exit shell (for 'exit' builtin) */
+}	t_env;
+/*---*/
+
+/* TOKEN TYPES */
+typedef enum e_token_type
+{
+	TOKEN_WORD,				/* Regular word/command/argument */
+	TOKEN_PIPE,				/* | */
+	TOKEN_REDIRECT_IN,		/*  */
+	TOKEN_REDIRECT_OUT,		/* > */
+	TOKEN_REDIRECT_APPEND,	/* >> */
+	TOKEN_HEREDOC,			/*  */
+}	t_token_type;
+
+typedef struct s_token
+{
+	t_token_type	type;	/* Type of token (WORD, PIPE, etc.) */
+	char			*word;	/* The actual string value */
+	struct s_token	*next;	/* Next token in the list */
+}	t_token;
+/*---*/
+
+/* AST TREE */
+typedef enum e_ast_type
+{
+	AST_COMMAND,			/* Simple command */
+	AST_PIPE,				/* Pipeline (|) */
+}	t_ast_type;
+
+typedef enum e_redirect_type
+{
+	REDIR_IN,				/* < (input) > (output) */
+	REDIR_OUT,
+	REDIR_APPEND,			/* >> (append), << (heredoc)*/
+	REDIR_HEREDOC
+}	t_redirect_type;
+
+typedef struct s_redirect
+{
+	t_redirect_type		type;		/* R_IN, R_OUT, R_APPEND, R_HEREDOC */
+	char				*file;		/* Filename or heredoc delimiter */
+	struct s_redirect	*next;		/* Next redirect in chain */
+}	t_redirect;
+
+typedef struct s_ast
+{
+	t_ast_type		type;			/* Type of AST node */
+	char			**args;			/* Command arguments (NULL-terminated) */
+	t_redirect		*redirects;		/* Linked list of redirections */
+	struct s_ast	*left;			/* Left child */
+	struct s_ast	*right;			/* Right child */
+}	t_ast;
+/*---*/
+
+t_ast *new_command(char **args)
+{
+	t_ast *node = malloc(sizeof(t_ast));
+	node->type = AST_COMMAND;
+	node->args = args;
+	node->redirects = NULL;
+	node->left = NULL;
+	node->right = NULL;
+	return node;
+}
+
+t_ast *new_pipe(t_ast *left, t_ast *right)
+{
+	t_ast *node = malloc(sizeof(t_ast));
+	node->type = AST_PIPE;
+	node->left = left;
+	node->right = right;
+	node->args = NULL;
+	node->redirects = NULL;
+	return node;
+}
+
+/* ===== REDIRECTION BUILDER ===== */
+
+t_redirect *redir_out(char *file)
+{
+	t_redirect *r = malloc(sizeof(t_redirect));
+	r->type = REDIR_OUT;
+	r->file = file;
+	r->next = NULL;
+	return r;
+}
+
+/* ===== UTILS ===== */
+
+void	ft_putendl_fd(char *s, int fd)
+{
+	if (!s)
+		return ;
+	while (*s)
+	{
+		write (fd, s, 1);
+		s++;
+	}
+	write (fd, "\n", 1);
+}
+char	*ft_strnstr(const char *big, const char *little, size_t len)
+{
+	size_t	i;
+	size_t	j;
+
+	i = 0;
+	j = 0;
+	if (little[j] == '\0')
+		return ((char *)big);
+	if (big[i] == '\0')
+		return (0);
+	while (i < len && big[i] != '\0')
+	{
+		j = 0;
+		while (little[j] == big[i + j] && (i + j) < len && little[j] != '\0')
+			j++;
+		if (little[j] == '\0')
+			return ((char *)&big[i]);
+		i++;
+	}
+	return (0);
+}
+
+
+static int	count_words(char const *s, char c)
+{
+	int	count;
+	int	in_word;
+
+	count = 0;
+	in_word = 0;
+	while (*s)
+	{
+		if (*s != c && !in_word)
+		{
+			in_word = 1;
+			count++;
+		}
+		else if (*s == c)
+			in_word = 0;
+		s++;
+	}
+	return (count);
+}
+
+static char	*get_word(char const *s, char c)
+{
+	int		len;
+	int		i;
+	char	*word;
+
+	len = 0;
+	while (s[len] && s[len] != c)
+		len++;
+	word = malloc(sizeof(char) * (len + 1));
+	if (!word)
+		return (NULL);
+	i = 0;
+	while (i < len)
+	{
+		word[i] = s[i];
+		i++;
+	}
+	word[i] = '\0';
+	return (word);
+}
+
+static void	free_split(char **split, int words)
+{
+	int	i;
+
+	i = 0;
+	while (i < words)
+	{
+		free(split[i]);
+		i++;
+	}
+	free(split);
+}
+
+char	**ft_split(char const *s, char c)
+{
+	char	**result;
+	int		words;
+	int		i;
+
+	if (!s)
+		return (NULL);
+	words = count_words(s, c);
+	result = malloc(sizeof(char *) * (words + 1));
+	if (!result)
+		return (NULL);
+	i = 0;
+	while (*s && i < words)
+	{
+		while (*s == c)
+			s++;
+		result[i] = get_word(s, c);
+		if (!result[i])
+			return (free_split(result, i), NULL);
+		while (*s && *s != c)
+			s++;
+		i++;
+	}
+	result[i] = NULL;
+	return (result);
+}
+#define _XOPEN_SOURCE 700
+extern void rl_redisplay (void);
+extern int rl_on_new_line (void);
+extern int rl_on_new_line_with_prompt (void);
+extern int rl_forced_update_display (void);
+extern int rl_clear_visible_line (void);
+extern int rl_clear_message (void);
+extern int rl_reset_line_state (void);
+extern int rl_crlf (void);
+
+// void	ft_sigint_handler(int sig)
+// {
+// 	(void)sig;
+// 	write(1, "\n", 1);
+// 	rl_on_new_line();
+// 	rl_replace_line("", 0);
+// 	rl_redisplay();
+// }
+
+void	ft_restore_signals(void)
+{
+	signal(SIGINT, SIG_DFL);
+	signal(SIGQUIT, SIG_DFL);
+}
+static void	ft_heredoc_sigint_handler(int sig)
+{
+	(void)sig;
+	write(1, "\n", 1);
+	exit(130);
+}
+
+void	ft_heredoc_signals(void)
+{
+	signal(SIGINT, ft_heredoc_sigint_handler);
+	signal(SIGQUIT, SIG_IGN);
+}
+
+# ifndef BUFFER_SIZE
+#  define BUFFER_SIZE 10
+# endif
+
+
+int	found_newline(char *stash)
+{
+	int	i;
+
+	if (stash == NULL)
+		return (0);
+	i = 0;
+	while (stash[i] != '\0')
+	{
+		if (stash[i] == '\n')
+			return (1);
+		i++;
+	}
+	return (0);
+}
+
+/* Calculates line lenght via stash info and allocates 
+   memory accordingly */
+
+void	create_line(char **line, char *stash)
+{
+	int	len;
+
+	len = 0;
+	while (stash[len] != '\0' && stash[len] != '\n')
+		len++;
+	if (stash[len] == '\n')
+		len++;
+	*line = malloc(len + 1);
+	if (!(*line))
+		return ;
+}
+
+/* Calculates the lenght of a string */
+
+int	ft_strlen_gnl(const char *s)
+{
+	int	count;
+
+	count = 0;
+	while (*s)
+	{
+		count++;
+		s++;
+	}
+	return (count);
+}
+static int	ft_write(const char *str)
+{
+	long	b;
+	long	final;
+
+	b = 0;
+	final = 0;
+	while (str[b] >= '0' && str[b] <= '9')
+	{
+		final = final * 10 + (str[b] - '0');
+		b++;
+	}
+	return (final);
+}
+
+int	ft_atoi(const char *nptr)
+{
+	long	minus;
+	long	a;
+
+	minus = 1;
+	a = 0;
+	while ((nptr[a] >= 9 && nptr[a] <= 13) || nptr[a] == 32)
+		a++;
+	if (nptr[a] == '-' || nptr[a] == '+')
+	{
+		if (nptr[a + 1] == '-' || nptr[a + 1] == '+')
+			return (0);
+		if (nptr[a] == '-')
+		{
+			minus = -1;
+			a++;
+		}
+		else if (nptr[a] == '+')
+			a++;
+	}
+	return (minus * ft_write(nptr + a));
+}
+
+void	free_stash(char **stash)
+{
+	free(*stash);
+	*stash = NULL;
+}
+
+char			*get_next_line(int fd);
+void			read_and_save(int fd, char **stash);
+char			*save_in_stash(char *stash, char *buffer, int rbytes);
+void			extract_line(char *stash, char **line);
+char			*clean_stash(char *stash);
+int				found_newline(char *stash);
+void			create_line(char **line, char *stash);
+void			free_stash(char **stash);
+int				ft_strlen_gnl(const char *s);
+
+char	*get_next_line(int fd)
+{
+	char		*line;
+	static char	*stash[10000];
+
+	if (fd < 0 || BUFFER_SIZE <= 0 || fd >= 10000)
+		return (NULL);
+	read_and_save(fd, &stash[fd]);
+	if (stash[fd] == NULL)
+		return (NULL);
+	extract_line(stash[fd], &line);
+	stash[fd] = clean_stash(stash[fd]);
+	if (!line || line[0] == '\0')
+		return (free(line), NULL);
+	return (line);
+}
+
+/* Reads the .txt file until a new line '\n' is found or 
+   it is the end of the .txt file. Pass the characters to
+   be saved in stash */
+
+void	read_and_save(int fd, char **stash)
+{
+	char	*buffer;
+	char	*new_stash;
+	int		rbytes;
+
+	rbytes = 1;
+	while (!found_newline(*stash) && rbytes > 0)
+	{
+		buffer = malloc(BUFFER_SIZE + 1);
+		if (!buffer)
+			return (free_stash(stash));
+		rbytes = (int)read(fd, buffer, BUFFER_SIZE);
+		if (rbytes == -1)
+		{
+			free_stash(stash);
+			return (free(buffer));
+		}
+		buffer[rbytes] = '\0';
+		new_stash = save_in_stash(*stash, buffer, rbytes);
+		if (new_stash)
+			*stash = new_stash;
+		else
+			free_stash(stash);
+		free (buffer);
+	}
+}
+
+/* Copies the temporay buffer content into our permanent
+   stash */
+
+char	*save_in_stash(char *stash, char *buffer, int rbytes)
+{
+	int		i;
+	int		j;
+	char	*new_stash;
+
+	if (stash == NULL)
+	{
+		new_stash = malloc(rbytes + 1);
+		if (!new_stash)
+			return (NULL);
+		i = -1;
+		while (++i < rbytes)
+			new_stash[i] = buffer[i];
+		return (new_stash[i] = '\0', new_stash);
+	}
+	new_stash = malloc(ft_strlen_gnl(stash) + rbytes + 1);
+	if (!new_stash)
+		return (NULL);
+	i = 0;
+	j = 0;
+	while (stash[i] != '\0')
+		new_stash[j++] = stash[i++];
+	i = 0;
+	while (i < rbytes && buffer[i])
+		new_stash[j++] = buffer[i++];
+	return (new_stash[j] = '\0', free (stash), new_stash);
+}
+
+/* Extract the complete line to display from the stash */
+
+void	extract_line(char *stash, char **line)
+{
+	int	i;
+
+	if (!stash)
+		return ;
+	create_line(line, stash);
+	if (!(*line))
+		return ;
+	i = 0;
+	while (stash[i] != '\0' && stash[i] != '\n')
+	{
+		(*line)[i] = stash[i];
+		i++;
+	}
+	if (stash[i] == '\n')
+	{
+		(*line)[i] = '\n';
+		i++;
+	}
+	(*line)[i] = '\0';
+}
+
+/* Erases the line displayed from the stash to prepare for
+   next line */
+
+char	*clean_stash(char *stash)
+{
+	int		i;
+	int		j;
+	char	*clean_stash;
+
+	i = 0;
+	j = 0;
+	while (stash[i] && stash[i] != '\n')
+		i++;
+	if (!stash[i])
+		return (free(stash), NULL);
+	i++;
+	clean_stash = malloc(ft_strlen_gnl(stash) - i + 1);
+	if (!clean_stash)
+		return (free(stash), NULL);
+	while (stash[i] != '\0')
+		clean_stash[j++] = stash[i++];
+	clean_stash[j] = '\0';
+	free (stash);
+	return (clean_stash);
+}
+
+
+/* ---- FT_PRINTF ---- */
+
+# ifndef BUFFER_SIZE
+#  define BUFFER_SIZE 10
+# endif
+
+typedef struct s_list
+{
+	void			*content;
+	struct s_list	*next;
+}	t_list;
+
+typedef struct s_flags
+{
+	va_list	args;
+	int		sign;
+	int		left_justified;
+	int		space;
+	int		zero_pad;
+	int		hash;
+	int		width;
+	int		dot;
+	int		precision;
+	char	specifier;
+	int		cur_len;
+	int		fin_len;
+}				t_flags;
+
+typedef struct s_hexa_param
+{
+	int		hexa_len;
+	int		zero_pad;
+	int		spaces;
+}				t_hexa_param;
+
+const char		*ft_parse(const char *format, t_flags *flags);
+void			ft_print_char(t_flags *flags);
+void			ft_print_hexa(t_flags *flags);
+void			ft_print_int(t_flags *flags);
+void			ft_print_pointer(t_flags *flags);
+void			ft_print_string(t_flags *flags);
+void			ft_print_unsigned_int(t_flags *flags);
+int				ft_printf(const char *format, ...);
+const char		*ft_write_printf(const char *format, t_flags *flags);
+int				ft_int_len(int i);
+void			ft_str_reverse(char *str, int len);
+void			ft_bzero(void *s, size_t n);
+void			*ft_calloc_printf(size_t count, size_t size);
+int				ft_strlen_printf(const char *str);
+int				ft_unsigned_len(unsigned int num);
+int				ft_atoi_printf(const char **format);
+t_hexa_param	*ft_hexa_param_initialization(t_hexa_param *hexa_param);
+
+static void	ft_print_hexa_body(char *fin_hexa, t_flags *flags,
+		t_hexa_param *hexa_param)
+{
+	if (!flags->left_justified)
+		while (hexa_param->spaces-- > 0)
+			flags->fin_len += write(1, " ", 1);
+	if (flags->hash)
+	{
+		if (flags->specifier == 'x')
+			flags->fin_len += write(1, "0x", 2);
+		else if (flags->specifier == 'X')
+			flags->fin_len += write(1, "0X", 2);
+	}
+	while (hexa_param->zero_pad-- > 0)
+		flags->fin_len += write(1, "0", 1);
+	flags->fin_len += write(1, fin_hexa, hexa_param->hexa_len);
+	if (flags->left_justified)
+		while (hexa_param->spaces-- > 0)
+			flags->fin_len += write(1, " ", 1);
+}
+
+static char	*ft_hexa_conversion_upper(unsigned int hexa)
+{
+	char	*fin_hexa;
+	int		i;
+
+	i = 0;
+	fin_hexa = ft_calloc_printf(17, 1);
+	if (!fin_hexa)
+		return (NULL);
+	if (hexa == 0)
+	{
+		fin_hexa[i] = '0';
+		fin_hexa[i + 1] = '\0';
+		return (fin_hexa);
+	}
+	while (hexa && i < 16)
+	{
+		fin_hexa[i] = "0123456789ABCDEF"[hexa % 16];
+		hexa /= 16;
+		i++;
+	}
+	fin_hexa[i] = '\0';
+	ft_str_reverse(fin_hexa, i);
+	return (fin_hexa);
+}
+
+static char	*ft_hexa_conversion_lower(unsigned int hexa)
+{
+	char	*fin_hexa;
+	int		i;
+
+	i = 0;
+	fin_hexa = ft_calloc_printf(17, 1);
+	if (!fin_hexa)
+		return (NULL);
+	if (hexa == 0)
+	{
+		fin_hexa[i] = '0';
+		fin_hexa[i + 1] = '\0';
+		return (fin_hexa);
+	}
+	while (hexa && i < 16)
+	{
+		fin_hexa[i] = "0123456789abcdef"[hexa % 16];
+		hexa /= 16;
+		i++;
+	}
+	fin_hexa[i] = '\0';
+	ft_str_reverse(fin_hexa, i);
+	return (fin_hexa);
+}
+
+static int	ft_hexa_special(unsigned int hexa, t_flags *flags,
+		t_hexa_param *hexa_param)
+{
+	int	total_len;
+
+	if (flags->dot && flags->precision == 0 && hexa == 0)
+	{
+		while (flags->width-- > 0)
+			flags->fin_len += write(1, " ", 1);
+		return (free(hexa_param), 1);
+	}
+	if (flags->zero_pad && (flags->dot || flags->left_justified))
+		flags->zero_pad = 0;
+	if (flags->dot && flags->precision > hexa_param->hexa_len)
+		hexa_param->zero_pad = flags->precision - hexa_param->hexa_len;
+	if (flags->zero_pad && flags->width > hexa_param->hexa_len)
+		hexa_param->zero_pad = flags->width - hexa_param->hexa_len;
+	if (hexa == 0)
+		flags->hash = 0;
+	if (flags->hash == 1)
+		total_len = 2 + hexa_param->zero_pad + hexa_param->hexa_len;
+	else
+		total_len = hexa_param->zero_pad + hexa_param->hexa_len;
+	if (flags->width > total_len)
+		hexa_param->spaces = flags->width - total_len;
+	else
+		hexa_param->spaces = 0;
+	return (0);
+}
+
+void	ft_print_hexa(t_flags *flags)
+{
+	unsigned int	hexa;
+	char			*fin_hexa;
+	t_hexa_param	*hexa_param;
+
+	hexa_param = malloc(sizeof(t_hexa_param));
+	if (!hexa_param)
+		return ;
+	ft_hexa_param_initialization(hexa_param);
+	hexa = va_arg(flags->args, unsigned int);
+	if (flags->specifier == 'x')
+		fin_hexa = ft_hexa_conversion_lower(hexa);
+	else
+		fin_hexa = ft_hexa_conversion_upper(hexa);
+	if (!fin_hexa)
+		return (free(hexa_param));
+	hexa_param->hexa_len = ft_strlen_printf(fin_hexa);
+	if (ft_hexa_special(hexa, flags, hexa_param))
+		return (free(fin_hexa));
+	ft_print_hexa_body(fin_hexa, flags, hexa_param);
+	return (free(fin_hexa), free(hexa_param));
+}
+
+static void	ft_putnbr(int i, t_flags *flags)
+{
+	char	c;
+
+	if (i >= 10)
+		ft_putnbr(i / 10, flags);
+	c = (i % 10) + '0';
+	flags->fin_len += write(1, &c, 1);
+}
+
+void	ft_flags_adj(t_flags *flags, int len, int *zeros, int *spaces)
+{
+	if (flags->space == 1 && flags->sign == 1)
+		flags->space = 0;
+	if (flags->sign == 1)
+		flags->fin_len += write(1, "+", 1);
+	else if (flags->space == 1)
+		flags->fin_len += write(1, " ", 1);
+	if (flags->left_justified == 1)
+		flags->zero_pad = 0;
+	if (flags->width > len && flags->zero_pad)
+		*zeros += flags->width - len;
+	if (flags->dot == 1)
+		flags->zero_pad = 0;
+	if (flags->dot == 1 && flags->precision > len)
+		*zeros += flags->precision - len;
+	if (flags->sign || flags->space)
+		*zeros -= 1;
+	*spaces = flags->width - (len + *zeros);
+	if (*spaces < 0)
+		*spaces = 0;
+	if (flags->left_justified == 0)
+		while ((*spaces)-- > 0)
+			flags->fin_len += write(1, " ", 1);
+	if (flags->left_justified == 0)
+		while ((*zeros)-- > 0)
+			flags->fin_len += write(1, "0", 1);
+}
+
+static int	ft_handle_neg(int i, t_flags *flags)
+{
+	if (i == -2147483648)
+	{
+		flags->fin_len += write (1, "-2147483648", 11);
+		return (-1);
+	}
+	if (i < 0)
+	{
+		flags->fin_len += write(1, "-", 1);
+		flags->sign = 0;
+		flags->space = 0;
+		flags->precision += 1;
+		i = -i;
+	}
+	return (i);
+}
+
+static int	ft_int_special(int i, t_flags *flags)
+{
+	if (i == 0 && flags->dot && flags->precision == 0)
+	{
+		while (flags->width-- > 0)
+			flags->fin_len += write(1, " ", 1);
+		return (1);
+	}
+	return (0);
+}
+
+void	ft_print_int(t_flags *flags)
+{
+	int	i;
+	int	len;
+	int	zeros;
+	int	spaces;
+
+	i = va_arg(flags->args, int);
+	if (ft_int_special(i, flags))
+		return ;
+	zeros = 0;
+	spaces = 0;
+	len = ft_int_len(i);
+	if (i < 0)
+		i = ft_handle_neg(i, flags);
+	if (i == -1)
+		return ;
+	ft_flags_adj(flags, len, &zeros, &spaces);
+	ft_putnbr(i, flags);
+	if (flags->left_justified == 1)
+		while (spaces-- > 0)
+			flags->fin_len += write(1, " ", 1);
+}
+
+static void	ft_fmt_treatment(t_flags *flags)
+{
+	if (flags->specifier == 'c')
+		ft_print_char(flags);
+	if (flags->specifier == 's')
+		ft_print_string(flags);
+	if (flags->specifier == 'p')
+		ft_print_pointer(flags);
+	if (flags->specifier == 'd' || flags->specifier == 'i')
+		ft_print_int(flags);
+	if (flags->specifier == 'u')
+		ft_print_unsigned_int(flags);
+	if (flags->specifier == 'x' || flags->specifier == 'X')
+		ft_print_hexa(flags);
+}
+
+static int	is_valid_specifier(char c)
+{
+	return (c == 'c' || c == 's' || c == 'p'
+		|| c == 'd' || c == 'i' || c == 'u'
+		|| c == 'x' || c == 'X');
+}
+
+static void	ft_fmt_analysis_part_2(const char **format, t_flags *flags)
+{
+	while (**format && !is_valid_specifier(**format))
+	{
+		if (**format >= '1' && **format <= '9')
+		{
+			flags->width = ft_atoi_printf(format);
+			continue ;
+		}
+		else if (**format == '*')
+			flags->width = va_arg(flags->args, int);
+		else if (**format == '.')
+		{
+			(*format)++;
+			flags->dot = 1;
+			if (**format == '*')
+			{
+				flags->precision = va_arg(flags->args, int);
+				(*format)++;
+			}
+			else
+				flags->precision = ft_atoi_printf(format);
+		}
+		else
+			break ;
+	}
+}
+
+static void	ft_fmt_analysis_part_1(const char **format, t_flags *flags)
+{
+	while (**format && !is_valid_specifier(**format))
+	{
+		if (**format == '+')
+			flags->sign = 1;
+		else if (**format == '-')
+			flags->left_justified = 1;
+		else if (**format == ' ')
+			flags->space = 1;
+		else if (**format == '0')
+			flags->zero_pad = 1;
+		else if (**format == '#')
+			flags->hash = 1;
+		else
+			break ;
+		(*format)++;
+	}
+}
+
+const char	*ft_parse(const char *format, t_flags *flags)
+{
+	if (*format == '%')
+	{
+		write(1, "%", 1);
+		flags->fin_len += 1;
+		return (format + 1);
+	}
+	ft_fmt_analysis_part_1(&format, flags);
+	ft_fmt_analysis_part_2(&format, flags);
+	if (is_valid_specifier(*format))
+	{
+		flags->specifier = *format;
+		ft_fmt_treatment(flags);
+		return (format + 1);
+	}
+	return (NULL);
+}
+
+static void	ft_print_pointer_body(char *address, t_flags *flags,
+		t_hexa_param *add_param)
+{
+	if (!flags->left_justified)
+		while (add_param->spaces-- > 0)
+			flags->fin_len += write(1, " ", 1);
+	flags->fin_len += write(1, "0x", 2);
+	while (add_param->zero_pad-- > 0)
+		flags->fin_len += write(1, "0", 1);
+	flags->fin_len += write(1, address, add_param->hexa_len);
+	if (flags->left_justified)
+		while (add_param->spaces-- > 0)
+			flags->fin_len += write(1, " ", 1);
+}
+
+static void	ft_pointer_flags(t_flags *flags, t_hexa_param *add_param)
+{
+	int	total_len;
+
+	if (flags->dot && flags->precision == 0)
+		add_param->hexa_len = 0;
+	if (flags->dot && flags->precision > add_param->hexa_len)
+		add_param->zero_pad = flags->precision - add_param->hexa_len;
+	total_len = 2 + add_param->zero_pad + add_param->hexa_len;
+	if (flags->width > total_len)
+		add_param->spaces = flags->width - total_len;
+	else
+		add_param->spaces = 0;
+}
+
+static char	*ft_convert_to_hex(unsigned long ptr)
+{
+	char	*address;
+	int		i;
+
+	i = 0;
+	address = ft_calloc_printf(17, 1);
+	if (!address)
+		return (NULL);
+	if (ptr == 0)
+	{
+		address[i] = '0';
+		address[i + 1] = '\0';
+		return (address);
+	}
+	while (ptr && i < 16)
+	{
+		address[i] = "0123456789abcdef"[ptr % 16];
+		ptr /= 16;
+		i++;
+	}
+	address[i] = '\0';
+	ft_str_reverse(address, i);
+	return (address);
+}
+
+static int	ft_pointer_special(unsigned long ptr, t_flags *flags)
+{
+	if (!ptr)
+	{
+		flags->fin_len += write(1, "(nil)", 5);
+		return (1);
+	}
+	if (ptr && flags->dot && flags->precision == 0)
+	{
+		flags->fin_len += write(1, "0x", 2);
+		return (1);
+	}
+	return (0);
+}
+
+static void	ft_yes_p_no_w(t_flags *flags, char *str)
+{
+	int	i;
+
+	i = 0;
+	while (str[i] != '\0' && i < flags->precision)
+	{
+		flags->fin_len += write(1, &str[i], 1);
+		i++;
+	}
+}
+
+static void	ft_yes_p_yes_w(t_flags *flags, char *str)
+{
+	int	i;
+	int	str_length;
+
+	i = 0;
+	str_length = ft_strlen_printf((const char *)str);
+	if (flags->precision < str_length)
+		str_length = flags->precision;
+	if (flags->left_justified > 0)
+	{
+		flags->fin_len += write(1, str, str_length);
+		while (i < (flags->width - str_length))
+		{
+			flags->fin_len += write(1, " ", 1);
+			i++;
+		}
+	}
+	else
+	{
+		while (i < (flags->width - str_length))
+		{
+			flags->fin_len += write(1, " ", 1);
+			i++;
+		}
+		flags->fin_len += write(1, str, str_length);
+	}
+}
+
+static void	ft_no_p_no_w(t_flags *flags, char *str)
+{
+	int	i;
+
+	i = 0;
+	while (str[i] != '\0')
+	{
+		flags->fin_len += write(1, &str[i], 1);
+		i++;
+	}
+}
+
+static void	ft_no_p_yes_w(t_flags *flags, char *str)
+{
+	int	i;
+	int	str_length;
+
+	i = 0;
+	str_length = ft_strlen_printf((const char *)str);
+	if (flags->left_justified > 0)
+	{
+		flags->fin_len += write(1, str, str_length);
+		while (i < (flags->width - str_length))
+		{
+			flags->fin_len += write(1, " ", 1);
+			i++;
+		}
+	}
+	else
+	{
+		while (i < (flags->width - str_length))
+		{
+			flags->fin_len += write(1, " ", 1);
+			i++;
+		}
+		flags->fin_len += write(1, str, str_length);
+	}
+}
+
+void	ft_print_string(t_flags *flags)
+{
+	char	*str;
+	int		i;
+
+	str = va_arg(flags->args, char *);
+	i = 0;
+	if (!str)
+		str = "(null)";
+	if (flags->dot == 1)
+	{
+		if (flags->precision == 0)
+			while (i++ < flags->width)
+				flags->fin_len += write(1, " ", 1);
+		else if (flags->width > 0)
+			ft_yes_p_yes_w(flags, str);
+		else
+			ft_yes_p_no_w(flags, str);
+	}
+	else
+	{
+		if (flags->width > 0)
+			ft_no_p_yes_w(flags, str);
+		else
+			ft_no_p_no_w(flags, str);
+	}
+}
+
+static void	ft_putnbr_unsigned(unsigned int num, t_flags *flags)
+{
+	char	c;
+
+	if (num >= 10)
+		ft_putnbr_unsigned(num / 10, flags);
+	c = (num % 10) + '0';
+	flags->fin_len += write(1, &c, 1);
+}
+
+static void	ft_flags_adj_unsigned(t_flags *flags, int len,
+		int *zeros, int *spaces)
+{
+	if (flags->left_justified == 1 || flags->dot == 1)
+		flags->zero_pad = 0;
+	if (flags->width > len && flags->zero_pad == 1 && flags->precision <= len)
+		*zeros += flags->width - len;
+	if (flags->dot == 1 && flags->precision > len)
+		*zeros += flags->precision - len;
+	*spaces = flags->width - (len + *zeros);
+	if (*spaces < 0)
+		*spaces = 0;
+	if (flags->left_justified == 0)
+		while ((*spaces)-- > 0)
+			flags->fin_len += write(1, " ", 1);
+	if (flags->left_justified == 0)
+		while ((*zeros)-- > 0)
+			flags->fin_len += write(1, "0", 1);
+}
+
+static int	ft_unsigned_int_special(unsigned int num, t_flags *flags)
+{
+	if (num == 0 && flags->dot && flags->precision == 0)
+	{
+		while (flags->width-- > 0)
+			flags->fin_len += write(1, " ", 1);
+		return (1);
+	}
+	return (0);
+}
+
+void	ft_print_unsigned_int(t_flags *flags)
+{
+	unsigned int	num;
+	int				len;
+	int				zeros;
+	int				spaces;
+
+	num = va_arg(flags->args, unsigned int);
+	if (ft_unsigned_int_special(num, flags))
+		return ;
+	zeros = 0;
+	spaces = 0;
+	len = ft_unsigned_len(num);
+	ft_flags_adj_unsigned (flags, len, &zeros, &spaces);
+	ft_putnbr_unsigned(num, flags);
+	if (flags->left_justified == 1)
+		while (spaces-- > 0)
+			flags->fin_len += write(1, " ", 1);
+}
+
+t_hexa_param	*ft_hexa_param_initialization(t_hexa_param *hexa_param)
+{
+	hexa_param->hexa_len = 0;
+	hexa_param->zero_pad = 0;
+	hexa_param->spaces = 0;
+	return (hexa_param);
+}
+
+int	ft_unsigned_len(unsigned int num)
+{
+	int	len;
+
+	if (num == 0)
+		return (1);
+	len = 0;
+	while (num > 0)
+	{
+		num /= 10;
+		len++;
+	}
+	return (len);
+}
+
+int	ft_int_len(int i)
+{
+	int	len;
+
+	if (i == 0)
+		return (1);
+	len = 0;
+	if (i < 0)
+	{
+		len++;
+		i = -i;
+	}
+	while (i > 0)
+	{
+		i /= 10;
+		len++;
+	}
+	return (len);
+}
+
+void	ft_str_reverse(char *str, int len)
+{
+	int		i;
+	char	temp;
+
+	i = 0;
+	while (i < len / 2)
+	{
+		temp = str[i];
+		str[i] = str[len - i - 1];
+		str[len - i - 1] = temp;
+		i++;
+	}
+}
+
+void	ft_bzero(void *s, size_t n)
+{
+	unsigned char	*ptr;
+	size_t			i;
+
+	ptr = (unsigned char *)s;
+	i = 0;
+	while (i < n)
+	{
+		ptr[i] = 0;
+		i++;
+	}
+}
+
+void	*ft_calloc_printf(size_t count, size_t size)
+{
+	void	*ptr;
+
+	ptr = malloc(count * size);
+	if (!ptr)
+		return (NULL);
+	ft_bzero(ptr, count * size);
+	return (ptr);
+}
+
+static char	*ft_strchr_printf(const char *format)
+{
+	while (*format)
+	{
+		if (*format == '%')
+			return ((char *)format);
+		format++;
+	}
+	if (!format)
+		return ((char *)format);
+	return (NULL);
+}
+
+const char	*ft_write_printf(const char *format, t_flags *flags)
+{
+	char	*next;
+
+	next = ft_strchr_printf(format);
+	if (next)
+		flags->cur_len = next - format;
+	else
+		flags->cur_len = ft_strlen_printf(format);
+	write(1, format, flags->cur_len);
+	flags->fin_len += flags->cur_len;
+	while (*format && *format != '%')
+		format++;
+	return (format);
+}
+static t_flags	*ft_initialize_struct(t_flags *flags)
+{
+	flags->sign = 0;
+	flags->left_justified = 0;
+	flags->space = 0;
+	flags->zero_pad = 0;
+	flags->hash = 0;
+	flags->width = 0;
+	flags->dot = 0;
+	flags->precision = 0;
+	flags->specifier = 0;
+	flags->cur_len = 0;
+	flags->fin_len = 0;
+	return (flags);
+}
+
+int	ft_printf(const char *format, ...)
+{
+	t_flags	*flags;
+	int		final_result;
+
+	flags = malloc(sizeof(t_flags));
+	if (!flags)
+		return (0);
+	ft_initialize_struct(flags);
+	va_start(flags->args, format);
+	while (*format)
+	{
+		if (*format == '%')
+			format = ft_parse(format + 1, flags);
+		else
+			format = ft_write_printf(format, flags);
+		if (!format)
+		{
+			write (1, "(null)", 6);
+			final_result = 6;
+			return (free(flags), final_result);
+		}
+	}
+	va_end(flags->args);
+	final_result = flags->fin_len;
+	return (free(flags), final_result);
+}
+
+int	ft_strlen_printf(const char *str)
+{
+	int	i;
+
+	i = 0;
+	while (str[i] != '\0')
+		i++;
+	return (i);
+}
+
+int	ft_atoi_printf(const char **format)
+{
+	int	final;
+
+	final = 0;
+	while (**format >= '0' && **format <= '9')
+	{
+		final = final * 10 + (**format - '0');
+		(*format)++;
+	}
+	return (final);
+}
+
+void	ft_print_pointer(t_flags *flags)
+{
+	unsigned long	ptr;
+	char			*address;
+	t_hexa_param	*add_param;
+
+	add_param = malloc(sizeof(t_hexa_param));
+	if (!add_param)
+		return ;
+	ft_hexa_param_initialization(add_param);
+	ptr = va_arg(flags->args, unsigned long);
+	if (ft_pointer_special(ptr, flags))
+		return (free(add_param));
+	address = ft_convert_to_hex(ptr);
+	if (!address)
+		return ;
+	add_param->hexa_len = ft_strlen_printf(address);
+	ft_pointer_flags(flags, add_param);
+	ft_print_pointer_body(address, flags, add_param);
+	free(address);
+	free(add_param);
+}
+
+static void	with_left_justified(t_flags *flags, char c)
+{
+	int		counter;
+
+	counter = 0;
+	flags->fin_len += write(1, &c, 1);
+	while (counter < ((flags->width) - 1))
+	{
+		flags->fin_len += write(1, " ", 1);
+		counter++;
+	}
+}
+
+static void	without_left_justified(t_flags *flags, char c)
+{
+	int		counter;
+
+	counter = 0;
+	while (counter < ((flags->width) - 1))
+	{
+		flags->fin_len += write(1, " ", 1);
+		counter++;
+	}
+	flags->fin_len += write(1, &c, 1);
+}
+
+void	ft_print_char(t_flags *flags)
+{
+	char	c;
+
+	c = va_arg(flags->args, int);
+	if (flags->width > 0)
+	{
+		if (flags->left_justified == 0)
+			without_left_justified(flags, c);
+		else
+			with_left_justified(flags, c);
+	}
+	else
+		flags->fin_len += write(1, &c, 1);
+}
+
+/* ---- UTILS ---- */
+char	*find_content(char *argument);
+int		find_index_in_env(char **envp, char *var_name);
+void	ft_putstr_fd(char *s, int fd);
+char	*ft_strchr(const char *s, int c);
+char	*ft_strdup(const char *s);
+size_t	ft_strlen(const char *s);
+int		ft_strncmp(const char *s1, const char *s2, size_t n);
+int		ft_strcmp(const char *s1, const char *s2);
+void	*ft_memcpy(void *dest, const void *src, size_t n);
+char	*ft_strjoin(char const *s1, char const *s2);
+
+char	*find_content(char *argument)
+{
+	char	*equal_start;
+
+	if (!argument)
+		return (NULL);
+	equal_start = ft_strchr(argument, '=');
+	if (!equal_start)
+		return (NULL);
+	return (ft_strdup(equal_start + 1));
+}
+
+int	find_index_in_env(char **envp, char *var_name)
+{
+	int		i;
+	size_t	var_len;		
+
+	if (!envp || !var_name)
+		return (-1);
+	var_len = ft_strlen(var_name);
+	if (var_len == 0)
+		return (-1);
+	i = 0;
+	while (envp[i] != NULL)
+	{
+		if ((ft_strncmp(envp[i], var_name, var_len) == 0) \
+&& envp[i][var_len] == '=')
+			return (i);
+		i++;
+	}
+	return (-1);
+}
+
+void	ft_putstr_fd(char *s, int fd)
+{
+	if (!s)
+		return ;
+	while (*s)
+	{
+		write (fd, s, 1);
+		s++;
+	}
+}
+
+char	*ft_strchr(const char *s, int c)
+{
+	int	count;
+
+	count = 0;
+	while (s[count] != '\0')
+	{
+		if (s[count] == (char)c)
+			return ((char *)&s[count]);
+		count++;
+	}
+	if ((char)c == '\0')
+		return ((char *)&s[count]);
+	return (NULL);
+}
+
+char	*ft_strdup(const char *s)
+{
+	char	*str;
+	int		s_length;
+	int		n;
+
+	s_length = 0;
+	while (s[s_length] != '\0')
+		s_length++;
+	str = malloc(s_length + 1);
+	if (!str)
+		return (NULL);
+	n = 0;
+	while (s[n] != '\0')
+	{
+		str[n] = s[n];
+		n++;
+	}
+	str[n] = '\0';
+	return (str);
+}
+
+size_t	ft_strlen(const char *s)
+{
+	size_t	count;
+
+	count = 0;
+	while (*s)
+	{
+		count++;
+		s++;
+	}
+	return (count);
+}
+
+int	ft_strncmp(const char *s1, const char *s2, size_t n)
+{
+	size_t	i;
+
+	if (n == 0)
+		return (0);
+	i = 0;
+	while (i < n && s1[i] != '\0' && s2[i] != '\0')
+	{
+		if ((unsigned char)s1[i] != (unsigned char)s2[i])
+			return ((unsigned char)s1[i] - (unsigned char)s2[i]);
+		i++;
+	}
+	if (i == n)
+		return (0);
+	return ((unsigned char)s1[i] - (unsigned char)s2[i]);
+}
+
+char	*ft_strjoin(char const *s1, char const *s2)
+{
+	size_t	len_s1;
+	size_t	len_s2;
+	size_t	i;
+	size_t	j;
+	char	*joined;
+
+	if (!s1 || !s2)
+		return (NULL);
+	len_s1 = ft_strlen(s1);
+	len_s2 = ft_strlen(s2);
+	joined = malloc ((len_s1 + len_s2 + 1) * sizeof(char));
+	if (!joined)
+		return (NULL);
+	i = 0;
+	while (s1[i] != '\0')
+	{
+		joined[i] = s1[i];
+		i++;
+	}
+	j = 0;
+	while (s2[j] != '\0')
+		joined[i++] = s2[j++];
+	joined[i] = '\0';
+	return (joined);
+}
+
+void	*ft_memcpy(void *dest, const void *src, size_t n)
+{
+	size_t			i;
+	unsigned char	*ptr_src;
+	unsigned char	*ptr_dest;
+
+	i = 0;
+	ptr_src = (unsigned char *)src;
+	ptr_dest = (unsigned char *)dest;
+	while (i < n)
+	{
+		ptr_dest[i] = ptr_src[i];
+		i++;
+	}
+	return (dest);
+}
+
+int	ft_strcmp(const char *s1, const char *s2)
+{
+	int	i;
+
+	i = 0;
+	while (s1[i] && s2[i] && s1[i] == s2[i])
+		i++;
+	return ((unsigned char)s1[i] - (unsigned char)s2[i]);
+}
+void	free_array(char **array)
+{
+	int	i;
+
+	i = 0;
+	if (!array)
+		return ;
+	while (array[i] != NULL)
+	{
+		free(array[i]);
+		i++;
+	}
+	free(array);
+}
+
+/* ===== ENV BUILDER ===== */
+
+t_env *create_test_env(char **envp)
+{
+	t_env *env = malloc(sizeof(t_env));
+	int count = 0;
+	
+	// Count envp
+	while (envp[count])
+		count++;
+	
+	// COPY envp, don't just point to it
+	env->envp = malloc(sizeof(char *) * (count + 1));
+	int i = 0;
+	while (i < count)
+	{
+		env->envp[i] = ft_strdup(envp[i]);  // Deep copy each string
+		i++;
+	}
+	env->envp[count] = NULL;
+	
+	env->exit_status = 0;
+	env->should_exit = 0;
+	
+	return env;
+}
+
+/* ===== TEST RUNNER ===== */
+int	ft_exec_ast(t_ast *ast, t_env *env);
+
+void run_test(char *title, t_ast *ast, t_env *env)
+{
+	printf("\n===== %s =====\n", title);
+	int status = ft_exec_ast(ast, env);
+	printf("exit status = %d\n", status);
+}
+
+/* ===== MAIN TEST SUITE ===== */
+
+int main(int argc, char **argv, char **envp)
+{
+	t_env *env = create_test_env(envp);
+
+	/* ---------- TEST 1: simple command ---------- */
+	char *args1[] = {"ls", NULL};
+	run_test("simple ls", new_command(args1), env);
+
+	/* ---------- TEST 2: command with args ---------- */
+	char *args2[] = {"echo", "hello", NULL};
+	run_test("echo builtin", new_command(args2), env);
+
+	/* ---------- TEST 3: external command ---------- */
+	char *args3[] = {"pwd", NULL};
+	run_test("pwd", new_command(args3), env);
+
+	/* ---------- TEST 4: pipe ---------- */
+	char *ls_args[] = {"ls", NULL};
+	char *grep_args[] = {"grep", "minishell", NULL};
+	t_ast *pipe_test = new_pipe(
+		new_command(ls_args),
+		new_command(grep_args)
+	);
+	run_test("pipe ls | grep", pipe_test, env);
+
+	/* ---------- TEST: pipe echo → grep (match) ---------- */
+	char *echo_args2[] = {"echo", "hello", NULL};
+	char *grep_args2[] = {"grep", "hello", NULL};
+	t_ast *pipe_test2 = new_pipe(
+		new_command(echo_args2),
+		new_command(grep_args2)
+	);
+	run_test("pipe echo hello | grep hello", pipe_test2, env);
+
+	/* ---------- TEST: pipe echo → grep (no match) ---------- */
+	char *echo_args3[] = {"echo", "hello", NULL};
+	char *grep_args3[] = {"grep", "bye", NULL};
+	t_ast *pipe_test3 = new_pipe(
+		new_command(echo_args3),
+		new_command(grep_args3)
+	);
+	run_test("pipe echo hello | grep bye", pipe_test3, env);
+
+	/* ---------- TEST: builtin → external pipe ---------- */
+	char *echo_args4[] = {"echo", "abc", NULL};
+	char *wc_args[] = {"wc", "-c", NULL};
+	t_ast *pipe_test4 = new_pipe(
+		new_command(echo_args4),
+		new_command(wc_args)
+	);
+	run_test("pipe echo abc | wc -c", pipe_test4, env);
+
+	/* ---------- TEST: external → external pipe ---------- */
+	char *ls_args2[] = {"ls", NULL};
+	char *grep_args4[] = {"grep", "exec", NULL};
+	t_ast *pipe_test5 = new_pipe(
+		new_command(ls_args2),
+		new_command(grep_args4)
+	);
+	run_test("pipe ls | grep exec", pipe_test5, env);
+
+	/* ---------- TEST: failing left command ---------- */
+	char *bad_args[] = {"nonexistent_command", NULL};
+	char *cat_args[] = {"cat", NULL};
+	t_ast *pipe_test6 = new_pipe(
+		new_command(bad_args),
+		new_command(cat_args)
+	);
+	run_test("pipe badcmd | cat", pipe_test6, env);
+
+	/* ---------- TEST: pipe with builtin that changes env ---------- */
+	char *export_args[] = {"export", "TEST=42", NULL};
+	char *env_args[] = {"env", NULL};
+
+	t_ast *pipe_test_env = new_pipe(
+		new_command(export_args),
+		new_command(env_args)
+	);
+
+	run_test("pipe export TEST=42 | env", pipe_test_env, env);
+
+	/* ---------- TEST: multiple pipes ---------- */
+	char *echo_args5[] = {"echo", "hello world", NULL};
+	char *tr_args[] = {"tr", "a-z", "A-Z", NULL};
+	char *grep_args5[] = {"grep", "HELLO", NULL};
+
+	t_ast *pipe1 = new_pipe(
+		new_command(echo_args5),
+		new_command(tr_args)
+	);
+
+	t_ast *pipe_test7 = new_pipe(
+		pipe1,
+		new_command(grep_args5)
+	);
+
+	run_test("pipe echo | tr | grep", pipe_test7, env);
+
+	/* ---------- TEST 5: redirection ---------- */
+	char *echo_args1[] = {"echo", "HELLO_REDIRECT", NULL};
+	t_ast *redir_cmd = new_command(echo_args1);
+	redir_cmd->redirects = redir_out("test_output.txt");
+	run_test("echo > file", redir_cmd, env);
+
+	/* ---------- TEST 6: command not found ---------- */
+	char *bad_args1[] = {"nonexistent_command", NULL};
+	run_test("command not found", new_command(bad_args1), env);
+
+	/* ---------- TEST 7: exit status ---------- */
+	char *false_args[] = {"false", NULL};
+	run_test("false exit code", new_command(false_args), env);
+
+	return 0;
+}
