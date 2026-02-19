@@ -6,7 +6,7 @@
 /*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/22 15:43:54 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/17 14:19:44 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/02/19 19:47:26 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -70,33 +70,30 @@ int	shell_loop(t_env *env)
 	return (exit_status);
 }
 
-/* Prepare a raw input for execution */
 int	ft_process_line(char *line, t_env *env, int exit_status)
 {
 	t_token	*tokens;
 	t_ast	*ast;
+	int		parse_status;
 
-	// printf("DEBUG process_line: line='%s'\n", line);  // ← Add this
-
-	tokens = ft_lex(line, &exit_status);
-	// printf("DEBUG: tokens=%p\n", (void *)tokens);  // ← Add this
-
+// printf("DEBUG process_line: line='%s'\n", line);  // ← Add this
+	parse_status = 0;
+	tokens = ft_lex(line, &parse_status);
+// printf("DEBUG: tokens=%p\n", (void *)tokens);  // ← Add this
 	if (!tokens)
-		return (exit_status);
-	ast = ms_parse(tokens, &exit_status);
-	// printf("DEBUG: ast=%p\n", (void *)ast);
-
+		return (parse_status ? parse_status : exit_status);
+	ast = ms_parse(tokens, &parse_status);
+// printf("DEBUG: ast=%p\n", (void *)ast);
 	ft_free_tokens(&tokens);
-	// printf("DEBUG: ast=%p\n", ast);  // ← Add this
-
+// printf("DEBUG: ast=%p\n", ast);  // ← Add this
 	if (!ast)
-		return (exit_status);
+		return (parse_status ? parse_status : exit_status);
 	if (!ft_expand_ast(ast, env, &exit_status))
 	{
 		ft_free_ast(ast);
 		return (1);
 	}
-	printf("DEBUG: calling ft_exec_ast\n");  // ← Add this
+// printf("DEBUG: calling ft_exec_ast\n");  // ← Add this
 	exit_status = ft_exec_ast(ast, env);
 	ft_free_ast(ast);
 	return (exit_status);

@@ -6,7 +6,7 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/22 15:28:53 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/19 18:37:28 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/02/19 19:52:18 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,7 +25,7 @@
 # include <readline/readline.h>
 # include <readline/history.h>
 
-# define SENTINEL "\x01"
+# define SENTINEL '\x01'
 
 /* ENVIRONMENT STRUCTURE */
 typedef struct s_env
