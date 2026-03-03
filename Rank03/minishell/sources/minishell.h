@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   minishell.h                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/22 15:28:53 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/19 19:52:18 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/02/26 20:16:39 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,8 +24,12 @@
 # include <signal.h>
 # include <readline/readline.h>
 # include <readline/history.h>
+# include <sys/stat.h>
 
 # define SENTINEL '\x01'
+
+/* GLOBAL VARIABLE */
+extern volatile sig_atomic_t	g_signal;
 
 /* ENVIRONMENT STRUCTURE */
 typedef struct s_env
@@ -103,12 +107,12 @@ void			ft_heredoc_sigint_handler(int sig);
 
 /* LEXER */
 int				ft_token_len(t_token *tokens);
-int				ft_copy_quoted_text(char *word, char quote, int *i, char *clean);
+int				ft_copy_text(char *word, char quote, int *i, char *clean);
 void			ft_free_tokens(t_token **list);
-char		*ft_new_clean_word(char *word, int *exit_status);
-char		*ft_strip_quotes(char *word, int *exit_status);
-t_token		*ft_lex(char *line, int *exit_status);
-t_token		*ft_create_word_token(char *line, int i, int len, int *exit_status);
+char			*ft_new_clean_word(char *word, int *exit_status);
+char			*ft_strip_quotes(char *word, int *exit_status);
+t_token			*ft_lex(char *line, int *exit_status);
+t_token			*ft_new_word_tok(char *line, int i, int len, int *exit_status);
 
 /* PARSER */
 t_ast			*ms_parse(t_token *tokens, int *exit_status);
@@ -118,6 +122,7 @@ int				ft_count_words(t_token *tokens);
 void			ft_free_array(char **str);
 void			ft_free_redirects(t_redirect *redirect);
 t_redirect		*ft_build_redirects(t_token **tokens, int *exit_status);
+void			red(t_redirect **hd, t_redirect **tp, t_redirect *new);
 t_ast			*ft_build_ast_node(t_ast_type type, int *exit_status);
 void			ft_free_ast(t_ast *node);
 void			ft_malloc_error(int *exit_status);
@@ -134,6 +139,7 @@ int				is_dol_only(char *argument);
 int				char_is_valid(char c);
 char			*expand_string(char *str, char **envp, int *exit_stat);
 int				str_exp(char *str, char **envp, char **result, int *exit_stat);
+int				handle_exit_stat(char **result, int *exit_stat, char *var_name);
 void			expansion_error(char *var_name);
 char			*ft_charjoin(char *str, char c);
 int				expand_var(t_ast *ast, int i, int *exit_status, char **envp);
@@ -151,6 +157,8 @@ int				ft_exec_ast(t_ast *ast, t_env *env);
 /*** COMMAND ***/
 int				exec_command(t_ast *ast, t_env *env);
 void			exec_ext_command(char **command, char **envp);
+void			exec_command_child(t_ast *ast, t_env *env);
+int				handle_child_status(int status);
 int				is_built_in(char *command);
 int				execute_built_in(char *command, t_ast *ast, t_env *env);
 char			*command_path(char *command, char **envp);
@@ -160,6 +168,7 @@ char			*search_in_paths(char *command, char **all_paths);
 int				exec_pipe(t_ast *ast, t_env *env);
 void			exec_left(t_ast *ast, t_env *env, int *fd);
 void			exec_right(t_ast *ast, t_env *env, int *fd);
+int				fork_error_cleanup(int fd[2]);
 /*** REDIRECTIONS ***/
 int				handle_redirections(t_redirect *redirects);
 int				execute_built_in_redirections(t_ast *ast, t_env *env);

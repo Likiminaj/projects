@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ast_expansion_redirections.c                       :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/10 15:31:43 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/11 16:43:19 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/02/26 16:52:03 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 
 char	*expand_string(char *str, char **envp, int *exit_stat);
 int		str_exp(char *str, char **envp, char **result, int *exit_stat);
+int		handle_exit_stat(char **result, int *exit_stat, char *var_name);
 void	expansion_error(char *var_name);
 char	*ft_charjoin(char *str, char c);
 
@@ -52,19 +53,12 @@ int	str_exp(char *str, char **envp, char **result, int *exit_stat)
 	char	*content;
 	int		index;
 	int		result_len;
-	char	*exit_str;
 
 	var_name = find_var_name(str);
 	if (!var_name)
 		return (0);
 	if (var_name[0] == '?' && var_name[1] == '\0')
-	{
-		exit_str = ft_itoa(*exit_stat);
-		*result = ft_strappend(result, exit_str);
-		free(exit_str);
-		free(var_name);
-		return (2);
-	}
+		return (handle_exit_stat(result, exit_stat, var_name));
 	index = find_index_in_env(envp, var_name);
 	if (index != -1)
 	{
@@ -77,6 +71,17 @@ int	str_exp(char *str, char **envp, char **result, int *exit_stat)
 	result_len = ft_strlen(var_name) + 1;
 	free(var_name);
 	return (result_len);
+}
+
+int	handle_exit_stat(char **result, int *exit_stat, char *var_name)
+{
+	char	*exit_str;
+
+	exit_str = ft_itoa(*exit_stat);
+	*result = ft_strappend(result, exit_str);
+	free(exit_str);
+	free(var_name);
+	return (2);
 }
 
 void	expansion_error(char *var_name)

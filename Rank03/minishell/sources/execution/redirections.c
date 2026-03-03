@@ -6,7 +6,7 @@
 /*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/04 17:23:57 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/05 16:28:08 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/02 16:31:58 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,7 @@ int		handle_redirections(t_redirect *redirects);
 int		execute_built_in_redirections(t_ast *ast, t_env *env);
 int		heredoc_handling(char *delimiter);
 void	read_heredoc_lines(int write_fd, char *delimiter);
+int		check_heredoc_status(int status, int fd);
 
 /* Handles < (input), > (output), >> (append), << (heredoc).*/
 int	handle_redirections(t_redirect *redirects)
@@ -36,7 +37,7 @@ int	handle_redirections(t_redirect *redirects)
 		else if (current->type == REDIR_HEREDOC)
 			fd = heredoc_handling(current->file);
 		if (fd == -1)
-			return (perror(current->file), -1);
+			return (ft_putstr_fd("minishell: ", 2), perror(current->file), -1);
 		if (current->type == REDIR_IN || current->type == REDIR_HEREDOC)
 			dup2(fd, STDIN_FILENO);
 		else
@@ -99,9 +100,7 @@ int	heredoc_handling(char *delimiter)
 	}
 	close(fd[1]);
 	waitpid(pid, &status, 0);
-	if (WIFSIGNALED(status))
-		return (close(fd[0]), -1);
-	return (fd[0]);
+	return (check_heredoc_status(status, fd[0]));
 }
 
 /* Reads lines from stdin until delimiter, writes to pipe fd. */
@@ -125,4 +124,19 @@ void	read_heredoc_lines(int write_fd, char *delimiter)
 		write(write_fd, line, ft_strlen(line));
 		free(line);
 	}
+}
+
+int	check_heredoc_status(int status, int fd)
+{
+	if (WIFEXITED(status) && WEXITSTATUS(status) == 130)
+	{
+		g_signal = SIGINT;
+		return (close(fd), -1);
+	}
+	if (WIFSIGNALED(status))
+	{
+		g_signal = WTERMSIG(status);
+		return (close(fd), -1);
+	}
+	return (fd);
 }

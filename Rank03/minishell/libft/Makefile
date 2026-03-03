@@ -6,7 +6,7 @@
 #    By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/04/05 19:48:28 by cpesty            #+#    #+#              #
-#    Updated: 2026/02/17 14:30:29 by chlpesty         ###   ########.fr        #
+#    Updated: 2026/02/26 21:17:28 by chlpesty         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -78,7 +78,7 @@ MY_SOURCES = ft_atoi.c \
 HEADERS = libft.h
 MY_OBJECTS = $(MY_SOURCES:.c=.o)
 CC = cc
-CFLAGS = -Wall -Wextra -Werror -fPIC
+CFLAGS = -Wall -Wextra -Werror
 
 #RULES
 all: $(NAME)

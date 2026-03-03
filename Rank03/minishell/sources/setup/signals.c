@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   signals.c                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/12 15:23:45 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/11 16:47:17 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/02/26 16:19:58 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,7 +15,9 @@
 #include "../minishell.h"
 #include "../../libft/libft.h"
 
-// prototype(s)
+volatile sig_atomic_t	g_signal = 0;
+
+void	ft_interactive_signals(void);
 void	ft_sigint_handler(int sig);
 void	ft_restore_signals(void);
 void	ft_heredoc_signals(void);
@@ -34,7 +36,7 @@ void	ft_interactive_signals(void)
 
 void	ft_sigint_handler(int sig)
 {
-	(void)sig;
+	g_signal = sig;
 	write(1, "\n", 1);
 	rl_on_new_line();
 	rl_replace_line("", 0);
@@ -55,7 +57,7 @@ void	ft_heredoc_signals(void)
 
 void	ft_heredoc_sigint_handler(int sig)
 {
-	(void)sig;
+	g_signal = sig;
 	write(1, "\n", 1);
 	exit(130);
 }

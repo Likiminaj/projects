@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   lexer_helpers.c                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: lraghave <lraghave@student.42singapore.sg> +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/21 16:01:32 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/19 18:02:33 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/02/26 16:48:21 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -33,14 +33,14 @@ void	ft_free_tokens(t_token **list)
 
 int	ft_token_len(t_token *tokens)
 {
-	int	i;
-	t_token *current;
+	int		i;
+	t_token	*current;
 
 	i = 0;
 	if (!tokens)
 		return (i);
 	current = tokens;
-	while(current)
+	while (current)
 	{
 		i++;
 		current = current -> next;
@@ -48,7 +48,7 @@ int	ft_token_len(t_token *tokens)
 	return (i);
 }
 
-t_token	*ft_create_word_token(char *line, int i, int len, int *exit_status)
+t_token	*ft_new_word_tok(char *line, int i, int len, int *exit_status)
 {
 	t_token	*tok;
 	char	*raw;
@@ -84,7 +84,7 @@ char	*ft_strip_quotes(char *word, int *exit_status)
 		{
 			quote = word[i];
 			i++;
-			j += ft_copy_quoted_text(word, quote, &i, clean + j);
+			j += ft_copy_text(word, quote, &i, clean + j);
 			if (word[i] == quote)
 				i++;
 		}

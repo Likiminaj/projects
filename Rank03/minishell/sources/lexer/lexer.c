@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   lexer.c                                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/21 16:01:32 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/19 19:25:47 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/02/26 16:35:55 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -62,7 +62,7 @@ static int	ft_add_word(char *line, int i, t_token **list,
 		ft_putendl_fd("minishell: syntax error: unclosed quote", 2);
 		return (*exit_status = 2, -1);
 	}
-	tok = ft_create_word_token(line, i, len, exit_status);
+	tok = ft_new_word_tok(line, i, len, exit_status);
 	if (!tok)
 		return (-1);
 	ft_append_token(list, tok);

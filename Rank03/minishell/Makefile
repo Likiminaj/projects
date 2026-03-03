@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+         #
+#    By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/02/11 16:20:39 by lraghave          #+#    #+#              #
-#    Updated: 2026/02/19 17:52:22 by lraghave         ###   ########.fr        #
+#    Updated: 2026/02/26 21:22:33 by chlpesty         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -19,6 +19,10 @@ LDLIBS      = -lreadline -lhistory
 
 LIBFT_DIR   = libft
 LIBFT		= $(LIBFT_DIR)/libft.a
+
+HEADERS = \
+	sources/minishell.h \
+	$(LIBFT_DIR)/libft.h
 
 SOURCES = \
     sources/ast_expansion/ast_expansion.c \
@@ -64,7 +68,7 @@ $(LIBFT):
 $(NAME): $(OBJECTS)
 	$(CC) $(CFLAGS) $(OBJECTS) $(LIBFT) $(LDLIBS) -o $(NAME)
 
-%.o: %.c
+%.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -I$(LIBFT_DIR) -c $< -o $@
 
 clean:

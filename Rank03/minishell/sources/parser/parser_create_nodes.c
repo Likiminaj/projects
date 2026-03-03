@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   parser_create_nodes.c                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/25 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/11 16:55:38 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/02/26 16:36:58 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -48,4 +48,3 @@ void	ft_free_ast(t_ast *node)
 	}
 	free(node);
 }
-

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   parser_create_args.c                               :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/19 17:45:06 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/02/26 16:37:46 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -60,7 +60,6 @@ static void	ft_fill_args(char **args, t_token **tokens, int count)
 	}
 	args[i] = NULL;
 }
-
 
 static void	ft_free_partial(char **args, int i)
 {

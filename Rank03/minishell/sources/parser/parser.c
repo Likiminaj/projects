@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   parser.c                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/19 19:34:56 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/02/26 16:37:30 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,7 +17,6 @@
 t_ast	*ms_parse(t_token *tokens, int *exit_status);
 t_ast	*ft_build_command(t_token **tokens, int *exit_status);
 t_ast	*ft_build_pipeline(t_token **tokens, int *exit_status);
-
 
 t_ast	*ms_parse(t_token *tokens, int *exit_status)
 {
@@ -38,7 +37,10 @@ t_ast	*ft_build_command(t_token **tokens, int *exit_status)
 	node = ft_build_ast_node(AST_COMMAND, exit_status);
 	if (!node)
 		return (NULL);
-	pre = exit_status ? *exit_status : 0;
+	if (exit_status)
+		pre = *exit_status;
+	else
+		pre = 0;
 	tmp = *tokens;
 	node->redirects = ft_build_redirects(&tmp, exit_status);
 	if (!node->redirects && exit_status && *exit_status != pre)

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   parser_create_redirects.c                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/11 16:56:11 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/02/26 17:10:31 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,7 @@ t_redirect				*ft_build_redirects(t_token **tokens, int *exit_status);
 static t_redirect		*ft_build_redirect(t_token *token, int *exit_status);
 static t_redirect_type	ft_redirect_type(t_token_type type);
 static int				ft_is_redir(t_token_type t);
+void					red(t_redirect **hd, t_redirect **tp, t_redirect *new);
 
 t_redirect	*ft_build_redirects(t_token **tokens, int *exit_status)
 {
@@ -33,17 +34,13 @@ t_redirect	*ft_build_redirects(t_token **tokens, int *exit_status)
 			new = ft_build_redirect(*tokens, exit_status);
 			if (!new)
 				return (ft_free_redirects(head), NULL);
-			if (!head)
-				head = new;
-			else
-				temp->next = new;
-			temp = new;
+			red(&head, &temp, new);
 			*tokens = (*tokens)->next;
 			if (*tokens)
 				*tokens = (*tokens)->next;
-			continue ;
 		}
-		*tokens = (*tokens)->next;
+		else
+			*tokens = (*tokens)->next;
 	}
 	return (head);
 }
@@ -90,4 +87,13 @@ static int	ft_is_redir(t_token_type t)
 		|| t == TOKEN_REDIRECT_OUT
 		|| t == TOKEN_REDIRECT_APPEND
 		|| t == TOKEN_HEREDOC);
+}
+
+void	red(t_redirect **hd, t_redirect **tp, t_redirect *new)
+{
+	if (!*hd)
+		*hd = new;
+	else
+		(*tp)->next = new;
+	*tp = new;
 }

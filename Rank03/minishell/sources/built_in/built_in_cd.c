@@ -6,7 +6,7 @@
 /*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/18 17:00:21 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/02 02:43:06 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/02 16:26:57 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,7 @@ int	builtin_cd(t_ast *ast, t_env *env)
 {
 	char	*new_cwd;
 
-	if (ast->args[1] == NULL)
+	if (!ast->args[1] || ft_strcmp(ast->args[1], "~") == 0)
 		return (cd_home(env));
 	if (ast->args[2] != NULL)
 		return (ft_putstr_fd("minishell: cd: too many arguments\n", 2), 1);

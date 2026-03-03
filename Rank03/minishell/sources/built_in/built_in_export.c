@@ -6,7 +6,7 @@
 /*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/18 17:01:47 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/04 14:46:33 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/02/26 16:36:19 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,10 +59,10 @@ void	print_export(t_env *env)
 
 	if (!env || !env->envp)
 		return ;
-	sorted_envp = copy_envp(env->envp); // TO DO
+	sorted_envp = copy_envp(env->envp);
 	if (!sorted_envp)
 		return ;
-	bubble_sort_envp(sorted_envp); // TO DO
+	bubble_sort_envp(sorted_envp);
 	i = 0;
 	while (sorted_envp[i] != NULL)
 	{
