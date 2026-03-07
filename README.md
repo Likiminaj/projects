@@ -34,7 +34,7 @@ This repository contains projects completed as part of the **42 School curriculu
 ## Rank 03 (WIP)
 - **minishell** *(WIP)* – Building a Unix shell (lexing, parsing, execution, signals)
 - **philosophers** *(WIP)* – Concurrency, threading, and synchronization
-- **Exam Rank 03** *(WIP)* – Timed systems programming assessment
+- **Exam Rank 03** – Timed systems programming assessment
 
 ---
 
