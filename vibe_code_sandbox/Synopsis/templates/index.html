@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Synopsis — Reddit Research Synthesiser</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ================================================================
+       Header
+  ================================================================= -->
+  <header class="app-header">
+    <h1>Synopsis</h1>
+    <span class="tagline">Reddit Research Synthesiser</span>
+  </header>
+
+  <main class="app-main">
+
+    <!-- ================================================================
+         Input Card
+    ================================================================= -->
+    <div class="card" id="input-card">
+      <div class="card-header">
+        <h2>
+          <span class="section-icon">&#128279;</span>
+          Reddit Thread URLs
+        </h2>
+      </div>
+      <div class="card-body">
+
+        <textarea
+          id="url-input"
+          placeholder="Paste one Reddit thread URL per line, for example:&#10;https://www.reddit.com/r/Python/comments/abc123/some_post/&#10;https://www.reddit.com/r/webdev/comments/xyz789/another_post/"
+          spellcheck="false"
+        ></textarea>
+
+        <p class="input-hint">
+          One URL per line &mdash; supports reddit.com, old.reddit.com, and www.reddit.com.
+          Up to 20 threads at once.
+        </p>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="process-btn">Process Threads</button>
+          <button class="btn btn-secondary" id="export-btn" disabled>Export CSV</button>
+        </div>
+
+        <!-- Status / loading / error bar -->
+        <div id="status-bar"></div>
+
+      </div>
+    </div>
+
+    <!-- ================================================================
+         Results (hidden until data is loaded)
+    ================================================================= -->
+    <div id="results-section">
+
+      <!-- ---- Summary Statistics ---------------------------------------- -->
+      <div class="card">
+        <div class="card-header">
+          <h2><span class="section-icon">&#128202;</span> Summary Statistics</h2>
+        </div>
+        <div class="card-body">
+
+          <div class="stats-grid">
+            <div class="stat-card accent">
+              <div class="value" id="stat-threads">0</div>
+              <div class="label">Threads</div>
+            </div>
+            <div class="stat-card accent">
+              <div class="value" id="stat-comments">0</div>
+              <div class="label">Comments</div>
+            </div>
+            <div class="stat-card">
+              <div class="value" id="stat-avg-sentiment">0.000</div>
+              <div class="label">Avg Sentiment</div>
+            </div>
+            <div class="stat-card positive">
+              <div class="value" id="stat-positive">0</div>
+              <div class="label">Positive</div>
+            </div>
+            <div class="stat-card neutral">
+              <div class="value" id="stat-neutral">0</div>
+              <div class="label">Neutral</div>
+            </div>
+            <div class="stat-card negative">
+              <div class="value" id="stat-negative">0</div>
+              <div class="label">Negative</div>
+            </div>
+          </div>
+
+          <!-- Sentiment distribution bar -->
+          <div class="sentiment-bar-wrap">
+            <div class="bar-label">Sentiment Distribution</div>
+            <div class="sentiment-bar">
+              <div class="seg-pos" style="width: 0%"></div>
+              <div class="seg-neu" style="width: 0%"></div>
+              <div class="seg-neg" style="width: 0%"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ---- Qualitative Report ---------------------------------------- -->
+      <div class="card">
+        <div class="card-header">
+          <h2><span class="section-icon">&#128196;</span> Synthesis Report</h2>
+        </div>
+        <div class="card-body">
+          <pre id="report-pre">Report will appear here after processing.</pre>
+        </div>
+      </div>
+
+      <!-- ---- Quote Bank ------------------------------------------------- -->
+      <div class="card">
+        <div class="card-header">
+          <h2><span class="section-icon">&#128172;</span> Quote Bank</h2>
+        </div>
+
+        <!-- Tab buttons -->
+        <div class="quote-tabs">
+          <button class="tab-btn active" data-tab="most_upvoted">Most Upvoted</button>
+          <button class="tab-btn" data-tab="strong_positive">Strong Positive</button>
+          <button class="tab-btn" data-tab="strong_negative">Strong Negative</button>
+          <button class="tab-btn" data-tab="unmet_needs">Unmet Needs</button>
+          <button class="tab-btn" data-tab="refusals">Refusals</button>
+        </div>
+
+        <!-- Tab panels -->
+        <div class="tab-panel active" id="tab-most_upvoted">
+          <div class="quote-list" id="quotes-most-upvoted"></div>
+        </div>
+        <div class="tab-panel" id="tab-strong_positive">
+          <div class="quote-list" id="quotes-strong-positive"></div>
+        </div>
+        <div class="tab-panel" id="tab-strong_negative">
+          <div class="quote-list" id="quotes-strong-negative"></div>
+        </div>
+        <div class="tab-panel" id="tab-unmet_needs">
+          <div class="quote-list" id="quotes-unmet-needs"></div>
+        </div>
+        <div class="tab-panel" id="tab-refusals">
+          <div class="quote-list" id="quotes-refusals"></div>
+        </div>
+
+      </div>
+
+      <!-- ---- Comment Table --------------------------------------------- -->
+      <div class="card">
+        <div class="card-header">
+          <h2><span class="section-icon">&#128203;</span> Comment Data</h2>
+          <div class="table-controls">
+            <label>
+              <input type="checkbox" id="hide-redundant" />
+              Hide flagged comments
+            </label>
+          </div>
+        </div>
+        <div class="card-body" style="padding-top: 8px;">
+
+          <p id="comment-count-label" style="font-size:13px; color: var(--text-muted); margin-bottom: 8px;"></p>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Thread Title</th>
+                  <th>Subreddit</th>
+                  <th>URL</th>
+                  <th>Comment ID</th>
+                  <th>Parent ID</th>
+                  <th>Author</th>
+                  <th>Comment Body</th>
+                  <th>Upvotes</th>
+                  <th>Created (UTC)</th>
+                  <th>Sentiment Score</th>
+                  <th>Sentiment</th>
+                  <th>Redundancy Flag</th>
+                </tr>
+              </thead>
+              <tbody id="comment-tbody">
+                <!-- Rows rendered by app.js -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div class="pagination" id="pagination"></div>
+
+        </div>
+      </div>
+
+    </div><!-- /results-section -->
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
