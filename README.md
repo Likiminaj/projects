@@ -1,54 +1,27 @@
-# projects
-42 School projects covering C programming fundamentals, memory management, UNIX systems, and algorithmic thinking, built under strict constraints and evaluation standards.
+# Likitha's Technical Projects
 
-# 42 School Projects
+This repository contains my technical programming projects and experiments.
 
-This repository contains projects completed as part of the **42 School curriculum**, focused on low-level programming, systems fundamentals, and algorithmic problem-solving in C.
+I originally come from a product management background, but over time I became increasingly interested in understanding software systems more deeply — not just at a conceptual level, but by building them myself. Programming has become a way for me to explore how systems actually work, test ideas, and strengthen the way I collaborate with engineers.
 
----
+This repository is organised into two main areas:
 
-## Curriculum Overview
+## 42 School Projects
 
-42 School’s curriculum is structured into progressive ranks, each increasing in technical depth, constraints, and system-level understanding.
+These are projects completed as part of the **42 Singapore curriculum**, focused on low-level programming, systems thinking, and computer science fundamentals.
 
----
+All of the C projects in this section were implemented **entirely by me without AI assistance**. The goal was to deeply understand the underlying technical concepts rather than simply arrive at a working solution.
 
-## Rank 00
-- **Libft** – Custom implementation of standard C library functions
+At a time when AI tools are rapidly changing how software is written, I believe it is still important for product managers to understand the fundamentals of programming and systems. Being able to reason about how software works enables more effective debugging conversations, clearer communication with engineers, and stronger alignment when building complex products.
 
----
+Projects here include implementations such as custom C libraries, Unix shell behaviour, and other systems programming exercises.
 
-## Rank 01
-- **get_next_line** – Reading from file descriptors line by line
-- **ft_printf** – Reimplementation of the `printf` function
+## Vibe Code Sandbox
 
----
+This is a space for **experiments, prototypes, and exploratory builds**.
 
-## Rank 02
-- **Born2BeRoot** – Linux system administration, virtualization, and security basics
-- **push_swap** – Sorting algorithms under constrained operations
-- **Exam Rank 02** – Timed algorithmic and C programming assessment
+These projects are more informal and may involve different languages, tools, or ideas that I am curious to explore. The goal here is learning through experimentation — building small tools, testing concepts, and exploring new technical directions.
 
 ---
 
-## Rank 03 (WIP)
-- **minishell** *(WIP)* – Building a Unix shell (lexing, parsing, execution, signals)
-- **philosophers** *(WIP)* – Concurrency, threading, and synchronization
-- **Exam Rank 03** – Timed systems programming assessment
-
----
-
-## Skills & Concepts Covered
-- C programming and manual memory management
-- UNIX systems and process control
-- Parsing, lexing, and shell execution
-- Multithreading and synchronization primitives
-- Algorithmic thinking and complexity analysis
-- Defensive programming under strict constraints
-
----
-
-## Notes
-- All projects follow **42 School norms** and peer-evaluation standards.
-- Projects marked **WIP** are actively being developed.
-- This repository is maintained for learning and portfolio purposes.
+Programming has become an important part of how I think about products, systems, and problem solving. This repository is a record of that learning process.
