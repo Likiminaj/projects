@@ -6,6 +6,12 @@ I originally come from a product management background, but over time I became i
 
 This repository is organised into two main areas:
 
+## Vibe Code Sandbox
+
+This is a space for **experiments, prototypes, and exploratory builds**.
+
+These projects are more informal and may involve different languages, tools, or ideas that I am curious to explore. The goal here is learning through experimentation — building small tools, testing concepts, and exploring new technical directions.
+
 ## 42 School Projects
 
 These are projects completed as part of the **42 Singapore curriculum**, focused on low-level programming, systems thinking, and computer science fundamentals.
@@ -15,12 +21,6 @@ All of the C projects in this section were implemented **entirely by me without 
 At a time when AI tools are rapidly changing how software is written, I believe it is still important for product managers to understand the fundamentals of programming and systems. Being able to reason about how software works enables more effective debugging conversations, clearer communication with engineers, and stronger alignment when building complex products.
 
 Projects here include implementations such as custom C libraries, Unix shell behaviour, and other systems programming exercises.
-
-## Vibe Code Sandbox
-
-This is a space for **experiments, prototypes, and exploratory builds**.
-
-These projects are more informal and may involve different languages, tools, or ideas that I am curious to explore. The goal here is learning through experimentation — building small tools, testing concepts, and exploring new technical directions.
 
 ---
 
