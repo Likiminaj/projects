@@ -5,6 +5,7 @@ Fetches Reddit thread data and comments using Reddit's public JSON API.
 No API credentials required — just appends .json to any Reddit URL.
 """
 
+import html
 import requests
 import time
 import re
@@ -15,6 +16,31 @@ from urllib.parse import urlparse, urlunparse
 # How long to wait between requests when fetching multiple threads (seconds).
 # This is polite behavior and avoids Reddit rate-limiting us.
 REQUEST_DELAY = 1.5
+
+
+def _strip_markdown(text: str) -> str:
+    """Remove common Reddit markdown syntax, leaving plain readable text."""
+    # Bold/italic: ***text***, **text**, *text*, __text__, _text_
+    text = re.sub(r'\*{3}(.+?)\*{3}', r'\1', text, flags=re.DOTALL)
+    text = re.sub(r'\*{2}(.+?)\*{2}', r'\1', text, flags=re.DOTALL)
+    text = re.sub(r'\*(.+?)\*',       r'\1', text, flags=re.DOTALL)
+    text = re.sub(r'_{2}(.+?)_{2}',   r'\1', text, flags=re.DOTALL)
+    text = re.sub(r'_(.+?)_',         r'\1', text, flags=re.DOTALL)
+    # Strikethrough: ~~text~~
+    text = re.sub(r'~~(.+?)~~', r'\1', text, flags=re.DOTALL)
+    # Inline code: `code`
+    text = re.sub(r'`(.+?)`', r'\1', text)
+    # Links: [label](url) → label
+    text = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', text)
+    # Bare URLs in angle brackets: <https://...>
+    text = re.sub(r'<(https?://[^>]+)>', r'\1', text)
+    # Heading markers: ## Heading → Heading
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Horizontal rules
+    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    # Collapse 3+ consecutive blank lines to 2
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
 
 # HTTP headers to send with every request.
 # Reddit requires a descriptive User-Agent or it may block the request.
@@ -87,10 +113,20 @@ def flatten_comments(comment_list: list, thread_title: str, subreddit: str,
             continue
 
         data = item.get("data", {})
-        body = data.get("body", "")
+        raw_body = data.get("body", "")
+
+        # Decode HTML entities Reddit injects (e.g. &gt; &lt; &amp;)
+        raw_body = html.unescape(raw_body)
+
+        # Strip Reddit markdown quote-reply lines (lines starting with ">")
+        lines = [ln for ln in raw_body.splitlines() if not ln.lstrip().startswith(">")]
+        body = "\n".join(lines).strip()
+
+        # Strip Reddit markdown syntax so plain text is stored
+        body = _strip_markdown(body)
 
         # Skip only truly empty comments or ones whose body is [deleted]/[removed]
-        if not body or body.strip().lower() in ("[deleted]", "[removed]"):
+        if not body or body.lower() in ("[deleted]", "[removed]"):
             continue
 
         # Convert Unix timestamp to a readable UTC datetime string

@@ -38,8 +38,14 @@ _last_dataframe: pd.DataFrame = pd.DataFrame()
 
 @app.route("/")
 def index():
-    """Serve the main page."""
+    """Serve the landing page."""
     return render_template("index.html")
+
+
+@app.route("/results")
+def results():
+    """Serve the results page."""
+    return render_template("results.html")
 
 
 @app.route("/process", methods=["POST"])

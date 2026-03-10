@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Synopsis — Results</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234F46E5'/%3E%3Ctext x='16' y='23' font-family='Inter,system-ui,sans-serif' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- Warn-before-new modal -->
+  <div id="new-analysis-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <p class="modal-title">Start a new analysis?</p>
+      <p class="modal-body">Your current report will be gone once you leave. Download the CSV first if you want to keep it.</p>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="modal-cancel">Cancel</button>
+        <button class="btn-ghost btn-sm" onclick="handleExport()">Download CSV</button>
+        <button class="btn-analyze" id="modal-confirm">Leave anyway</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="header-inner">
+      <div class="header-brand">
+        <svg viewBox="0 0 32 32" width="32" height="32">
+          <rect width="32" height="32" rx="7" fill="#4F46E5"/>
+          <text x="16" y="23" font-family="Inter,system-ui,sans-serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">S</text>
+        </svg>
+        <span class="h-title">Synopsis</span>
+      </div>
+      <nav class="header-nav">
+        <a class="nav-link" href="#" id="new-analysis-link">← New analysis</a>
+        <button class="btn-ghost btn-sm" id="export-btn" onclick="handleExport()">Export CSV</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="results-main">
+
+    <!-- No data fallback -->
+    <div id="no-data-msg" style="display:none" class="no-data-msg">
+      <p>No results found. <a href="/">Run a new analysis →</a></p>
+    </div>
+
+    <!-- Stats row -->
+    <div class="card stats-row" id="stats-card">
+
+      <div class="stat-group">
+        <p class="section-label">Overview</p>
+        <div class="big-stats">
+          <div class="big-stat">
+            <div class="big-num" id="stat-threads">—</div>
+            <div class="big-lbl">Threads</div>
+          </div>
+          <div class="big-stat">
+            <div class="big-num" id="stat-comments">—</div>
+            <div class="big-lbl">Comments</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-vdivider"></div>
+
+      <div class="stat-group stat-group-sentiment">
+        <p class="section-label">Sentiment</p>
+        <div class="avg-score" id="stat-avg-sentiment">—</div>
+        <div class="sbar">
+          <div class="seg-pos" style="width:0%"></div>
+          <div class="seg-neu" style="width:0%"></div>
+          <div class="seg-neg" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="stat-vdivider"></div>
+
+      <div class="stat-group">
+        <p class="section-label">Breakdown</p>
+        <div class="consensus">
+          <div class="con-item">
+            <div class="con-num pos" id="stat-positive">—</div>
+            <div class="con-lbl">Positive</div>
+          </div>
+          <div class="con-item">
+            <div class="con-num neu" id="stat-neutral">—</div>
+            <div class="con-lbl">Neutral</div>
+          </div>
+          <div class="con-item">
+            <div class="con-num neg" id="stat-negative">—</div>
+            <div class="con-lbl">Negative</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Quote Bank -->
+    <section class="card quotes-card">
+      <p class="section-label">Quote Bank</p>
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="most_upvoted">Most Upvoted</button>
+        <button class="tab-btn" data-tab="strong_positive">Strong Positive</button>
+        <button class="tab-btn" data-tab="strong_negative">Strong Negative</button>
+      </div>
+      <div class="tab-panel active" id="tab-most_upvoted">
+        <div class="quote-list" id="quotes-most-upvoted"></div>
+      </div>
+      <div class="tab-panel" id="tab-strong_positive">
+        <div class="quote-list" id="quotes-strong-positive"></div>
+      </div>
+      <div class="tab-panel" id="tab-strong_negative">
+        <div class="quote-list" id="quotes-strong-negative"></div>
+      </div>
+    </section>
+
+    <!-- Theme Analysis -->
+    <section class="card" id="theme-analysis-card" style="display:none">
+      <p class="section-label">Thematic Analysis</p>
+      <p id="theme-analysis-status" class="sub-label"></p>
+      <div id="theme-grid"></div>
+    </section>
+
+    <!-- Comment Table -->
+    <section class="card table-card">
+      <div class="table-header">
+        <p class="section-label">Comments</p>
+        <div class="table-header-right">
+          <label class="toggle">
+            <input type="checkbox" id="hide-redundant" />
+            <span>Hide flagged</span>
+          </label>
+          <button class="btn-ghost btn-sm" onclick="handleExport()">Download CSV</button>
+        </div>
+      </div>
+      <p id="comment-count-label" class="sub-label"></p>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Thread</th>
+              <th>Subreddit</th>
+              <th>Link</th>
+              <th>Author</th>
+              <th>Body</th>
+              <th>↑</th>
+              <th>Date</th>
+              <th>Score</th>
+              <th>Sentiment</th>
+              <th>Flag</th>
+            </tr>
+          </thead>
+          <tbody id="comment-tbody"></tbody>
+        </table>
+      </div>
+      <div id="pagination"></div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
