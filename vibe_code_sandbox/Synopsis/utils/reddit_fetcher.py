@@ -89,8 +89,8 @@ def flatten_comments(comment_list: list, thread_title: str, subreddit: str,
         data = item.get("data", {})
         body = data.get("body", "")
 
-        # Skip deleted or removed comments — they have no research value
-        if body in ("[deleted]", "[removed]", "") or not body:
+        # Skip only truly empty comments or ones whose body is [deleted]/[removed]
+        if not body or body.strip().lower() in ("[deleted]", "[removed]"):
             continue
 
         # Convert Unix timestamp to a readable UTC datetime string

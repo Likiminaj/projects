@@ -38,27 +38,7 @@ STOPWORDS = {
     "good", "bad", "great", "same", "other", "well", "back", "come",
 }
 
-# ---------------------------------------------------------------------------
-# Keyword lists for unmet-needs and refusal detection
-# ---------------------------------------------------------------------------
-UNMET_NEED_PATTERNS = [
-    r"\bwish\b", r"\bwanted?\b", r"\bhope\b", r"\bif only\b",
-    r"\bneed[s]?\b", r"\bmissing\b", r"\black[s]?\b", r"\bgap\b",
-    r"\bwould love\b", r"\bwould be nice\b", r"\bwould be great\b",
-    r"\bwould help\b", r"\bplease add\b", r"\bfeature request\b",
-    r"\bwhy (isn.t|can.t|don.t)\b", r"\bno (way|option|support)\b",
-    r"\bstill (not|waiting)\b", r"\bundersupported\b", r"\boverlooked\b",
-]
-
-REFUSAL_PATTERNS = [
-    r"\brefuse\b", r"\bwon.t\b", r"\bwill never\b", r"\bnever (again|use|buy|try)\b",
-    r"\bno way\b", r"\babsolutely not\b", r"\bnot (going|planning) to\b",
-    r"\bhate (this|it|the)\b", r"\bcan.t stand\b", r"\bswitching (away|to)\b",
-    r"\buninstalled?\b", r"\bdeleted?\b", r"\bquit\b", r"\bboycott\b",
-    r"\bnever (heard|seen|touch)\b", r"\bstay away\b", r"\bavoid\b",
-]
-
-UNMET_RE = [re.compile(p, re.IGNORECASE) for p in UNMET_NEED_PATTERNS]
+REFUSAL_PATTERNS = []
 REFUSAL_RE = [re.compile(p, re.IGNORECASE) for p in REFUSAL_PATTERNS]
 
 # How many comments to include in each quote bank category
@@ -146,65 +126,39 @@ def build_quote_bank(df: pd.DataFrame) -> dict:
       most_upvoted        — highest upvote count
       strong_positive     — highest positive sentiment scores
       strong_negative     — lowest (most negative) sentiment scores
-      unmet_needs         — comments expressing a want or gap
-      refusals            — comments expressing rejection or refusal
     """
     if df.empty:
         return {
             "most_upvoted": [],
             "strong_positive": [],
             "strong_negative": [],
-            "unmet_needs": [],
-            "refusals": [],
         }
 
-    # Most upvoted
-    most_upvoted = (
-        df.nlargest(QUOTE_BANK_SIZE, "upvotes")
-        .apply(_format_quote, axis=1)
-        .tolist()
-    )
+    # Most upvoted — all comments tied at the maximum upvote count
+    max_upvotes = df["upvotes"].max()
+    most_upvoted = [
+        _format_quote(row)
+        for _, row in df[df["upvotes"] == max_upvotes].iterrows()
+    ]
 
-    # Strongly positive (score >= 0.5)
-    strong_positive = (
-        df[df["sentiment_score"] >= 0.5]
-        .nlargest(QUOTE_BANK_SIZE, "sentiment_score")
-        .apply(_format_quote, axis=1)
-        .tolist()
-    )
+    # Strong positive — top QUOTE_BANK_SIZE by score among positive-labelled comments
+    pos_df = df[df["sentiment_label"] == "positive"]
+    strong_positive = [
+        _format_quote(row)
+        for _, row in pos_df.nlargest(QUOTE_BANK_SIZE, "sentiment_score").iterrows()
+    ]
 
-    # Strongly negative (score <= -0.5)
-    strong_negative = (
-        df[df["sentiment_score"] <= -0.5]
-        .nsmallest(QUOTE_BANK_SIZE, "sentiment_score")
-        .apply(_format_quote, axis=1)
-        .tolist()
-    )
-
-    # Unmet needs — pattern matched on comment body
-    unmet_mask = df["comment_body"].apply(lambda t: _matches_any(t, UNMET_RE))
-    unmet_needs = (
-        df[unmet_mask]
-        .nlargest(QUOTE_BANK_SIZE, "upvotes")
-        .apply(_format_quote, axis=1)
-        .tolist()
-    )
-
-    # Refusals — pattern matched on comment body
-    refusal_mask = df["comment_body"].apply(lambda t: _matches_any(t, REFUSAL_RE))
-    refusals = (
-        df[refusal_mask]
-        .nlargest(QUOTE_BANK_SIZE, "upvotes")
-        .apply(_format_quote, axis=1)
-        .tolist()
-    )
+    # Strong negative — top QUOTE_BANK_SIZE by score among negative-labelled comments
+    neg_df = df[df["sentiment_label"] == "negative"]
+    strong_negative = [
+        _format_quote(row)
+        for _, row in neg_df.nsmallest(QUOTE_BANK_SIZE, "sentiment_score").iterrows()
+    ]
 
     return {
         "most_upvoted": most_upvoted,
         "strong_positive": strong_positive,
         "strong_negative": strong_negative,
-        "unmet_needs": unmet_needs,
-        "refusals": refusals,
     }
 
 
@@ -238,18 +192,6 @@ def build_report(df: pd.DataFrame, stats: dict, quote_bank: dict) -> str:
     themes_text = (
         ", ".join(top_keywords[:12]) if top_keywords else "insufficient data"
     )
-
-    # Unmet needs — top 5 bodies
-    unmet_snippets = []
-    for q in quote_bank["unmet_needs"][:5]:
-        snippet = q["body"][:200].replace("\n", " ")
-        unmet_snippets.append(f'  • u/{q["author"]} (+{q["upvotes"]}): "{snippet}…"')
-
-    # Refusal excerpts — top 5 bodies
-    refusal_snippets = []
-    for q in quote_bank["refusals"][:5]:
-        snippet = q["body"][:200].replace("\n", " ")
-        refusal_snippets.append(f'  • u/{q["author"]} (+{q["upvotes"]}): "{snippet}…"')
 
     # Top positive quote
     top_pos = ""
@@ -303,7 +245,6 @@ def build_report(df: pd.DataFrame, stats: dict, quote_bank: dict) -> str:
         "",
         "KEY THEMES",
         "-" * 40,
-        "  Most frequent meaningful terms across all comments:",
         f"  {themes_text}",
         "",
         "LEADING COMMUNITY VOICE",
@@ -321,25 +262,7 @@ def build_report(df: pd.DataFrame, stats: dict, quote_bank: dict) -> str:
         "  Strongest negative voice:",
         top_neg or "  (no strongly negative comments detected)",
         "",
-        "UNMET NEEDS & GAPS",
-        "-" * 40,
     ]
-
-    if unmet_snippets:
-        report_lines += unmet_snippets
-    else:
-        report_lines.append("  No clear unmet needs detected in this dataset.")
-
-    report_lines += [
-        "",
-        "REFUSALS & REJECTION SIGNALS",
-        "-" * 40,
-    ]
-
-    if refusal_snippets:
-        report_lines += refusal_snippets
-    else:
-        report_lines.append("  No clear refusal signals detected in this dataset.")
 
     report_lines += [
         "",
@@ -348,7 +271,6 @@ def build_report(df: pd.DataFrame, stats: dict, quote_bank: dict) -> str:
         "  Sentiment: VADER (Valence Aware Dictionary and sEntiment Reasoner)",
         "  Thresholds: positive ≥ 0.05, negative ≤ -0.05, neutral in between.",
         "  Themes: top keyword frequency (stopwords excluded).",
-        "  Unmet needs / refusals: regex pattern matching on comment text.",
         "  Potential redundancy flag: comments < 30 chars or matching filler patterns.",
         "",
         "=" * 60,

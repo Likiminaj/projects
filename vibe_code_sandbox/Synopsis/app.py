@@ -17,6 +17,7 @@ from flask import Flask, Response, jsonify, render_template, request
 
 from analysis.sentiment import add_sentiment_columns
 from analysis.synthesizer import build_quote_bank, build_report, build_summary_stats
+from analysis.thematic_coder import run_thematic_analysis
 from utils.reddit_fetcher import fetch_all_threads
 
 # ---------------------------------------------------------------------------
@@ -105,6 +106,10 @@ def process():
     quote_bank = build_quote_bank(df)
     report = build_report(df, stats, quote_bank)
 
+    # ---- Thematic coding (Claude-powered) ---------------------------------
+    theme_analysis = run_thematic_analysis(df)
+    comment_themes = theme_analysis.get("comment_themes", {})
+
     # Convert DataFrame to a list of dicts for the JSON response.
     # We coerce types so pandas booleans / numpy types serialise cleanly.
     comments_json = df.astype({
@@ -113,11 +118,19 @@ def process():
         "potential_redundancy": bool,
     }).to_dict(orient="records")
 
+    # Attach per-comment theme data
+    for comment in comments_json:
+        cid = comment["comment_id"]
+        coding = comment_themes.get(cid, {})
+        comment["themes"] = coding.get("themes", [])
+        comment["primary_theme"] = coding.get("primary_theme", None)
+
     return jsonify({
         "comments": comments_json,
         "stats": stats,
         "report": report,
         "quote_bank": quote_bank,
+        "theme_analysis": theme_analysis,
         "errors": fetch_errors,
     })
 
@@ -149,4 +162,4 @@ def export():
 
 if __name__ == "__main__":
     # debug=True gives auto-reload when you edit source files during development
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    app.run(debug=True, host="127.0.0.1", port=5001)
