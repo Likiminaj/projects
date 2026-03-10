@@ -80,14 +80,14 @@ python3 app.py
 You should see output like:
 
 ```
- * Running on http://127.0.0.1:5000
+ * Running on http://127.0.0.1:5001
  * Debug mode: on
 ```
 
 Open your browser and go to:
 
 ```
-http://localhost:5000
+http://localhost:5001
 ```
 
 ---
