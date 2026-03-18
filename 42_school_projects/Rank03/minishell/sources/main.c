@@ -6,17 +6,17 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/22 15:43:54 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/03/18 14:06:31 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:11:33 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "minishell.h"
 #include "../libft/libft.h"
 
-void	ft_input_check(int argc);
-int		shell_loop(t_env *env);
-int		ft_process_line(char *line, t_env *env, int exit_status);
-static char	*ft_read_continuation(char *line, int *exit_status);
+void		ft_input_check(int argc);
+int			shell_loop(t_env *env);
+int			ft_process_line(char *line, t_env *env, int exit_status);
+
 /* Runs a minimalist command-line interpreter that mimics basic
 bash functionality. */
 int	main(int argc, char **argv, char **envp)
@@ -77,7 +77,7 @@ int	shell_loop(t_env *env)
 			add_history(line);
 			line = ft_read_continuation(line, &exit_status);
 			if (!line)
-        		continue ;
+				continue ;
 			exit_status = ft_process_line(line, env, exit_status);
 		}
 		free(line);
@@ -114,30 +114,4 @@ int	ft_process_line(char *line, t_env *env, int exit_status)
 		return (ft_free_ast(ast), 1);
 	exit_status = ft_exec_ast(ast, env);
 	return (ft_free_ast(ast), exit_status);
-}
-
-static char	*ft_read_continuation(char *line, int *exit_status)
-{
-	t_token	*tokens;
-	char	*extra;
-	char	*tmp;
-
-	tokens = ft_lex(line, exit_status);
-	while (tokens && ft_last_token_is_pipe(tokens))
-	{
-		ft_free_tokens(&tokens);
-		extra = readline("> ");
-		if (!extra)
-			break ;
-		tmp = ft_strjoin(line, " ");
-		free(line);
-		line = ft_strjoin(tmp, extra);
-		free(tmp);
-		free(extra);
-		if (!line)
-			return (NULL);
-		tokens = ft_lex(line, exit_status);
-	}
-	ft_free_tokens(&tokens);
-	return (line);
 }

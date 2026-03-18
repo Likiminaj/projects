@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   built_in_var_utils.c                               :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/19 15:35:26 by cpesty            #+#    #+#             */
-/*   Updated: 2026/02/04 14:48:04 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:09:21 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -46,6 +46,7 @@ void	update_var(t_env *env, char *var_name, char *content)
 		env->envp = add_var(env->envp, new_var);
 }
 
+/* Replaces environment variable at index with new value and frees old. */
 void	overwrite_var(t_env *env, int index, char *new_var)
 {
 	free(env->envp[index]);
@@ -78,6 +79,7 @@ char	**add_var(char **envp, char *new_var)
 	return (new_envp);
 }
 
+/* Checks if argument contains an equals sign for variable assignment. */
 int	equal_found(char *arg)
 {
 	int	i;

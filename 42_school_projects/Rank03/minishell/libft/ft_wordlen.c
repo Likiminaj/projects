@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ft_wordlen.c                                       :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: lraghave <lraghave@student.42singapore.sg> +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/21 19:06:23 by lraghave          #+#    #+#             */
-/*   Updated: 2026/01/21 21:27:49 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:21:54 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,12 +14,12 @@
 
 int	ft_wordlen(char *str, int i)
 {
-	int	start;
+	int		start;
 	char	quote;
 
 	start = i;
 	while (str[i] && !ft_isspace(str[i]) && !ft_isoperator(str[i]))
-	{	
+	{
 		if (str[i] == '\'' || str[i] == '"')
 		{
 			quote = str[i];

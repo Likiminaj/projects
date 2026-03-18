@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ast_expansion_command.c                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/10 15:28:37 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/17 14:38:21 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:05:10 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,8 @@ char	*find_var_name(char *arg);
 int		expand_error_code(t_ast *ast, int i, int *exit_status);
 int		expand_fst_var(t_ast *ast, char **envp, char *var_name, int i);
 
+/* Expands all variables in command argument by finding and replacing
+each $VAR. */
 int	expand_var(t_ast *ast, int i, int *exit_status, char **envp)
 {
 	int		j;
@@ -72,6 +74,7 @@ char	*find_var_name(char *arg)
 	return (var_name);
 }
 
+/* Replaces $? with exit status number in command argument string. */
 int	expand_error_code(t_ast *ast, int i, int *exit_status)
 {
 	char	*error_number;
@@ -101,6 +104,7 @@ int	expand_error_code(t_ast *ast, int i, int *exit_status)
 	return (free(error_number), 0);
 }
 
+/* Expands first variable in argument by checking environment and replacing. */
 int	expand_fst_var(t_ast *ast, char **envp, char *var_name, int i)
 {
 	int	index;

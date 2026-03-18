@@ -6,7 +6,7 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/19 18:37:07 by cpesty            #+#    #+#             */
-/*   Updated: 2026/02/11 16:44:35 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/18 15:03:34 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,7 @@ int		dol_found(char *argument);
 int		is_dol_only(char *argument);
 int		char_is_valid(char c);
 
+/* Counts number of dollar signs in a string for variable expansion check. */
 int	dol_found(char *argument)
 {
 	int	i;
@@ -33,6 +34,7 @@ int	dol_found(char *argument)
 	return (count);
 }
 
+/* Checks if string is a lone dollar sign with no variable name. */
 int	is_dol_only(char *argument)
 {
 	if (argument[0] == '$' && argument[1] == '\0')
@@ -40,6 +42,8 @@ int	is_dol_only(char *argument)
 	return (0);
 }
 
+/* Validates if character is valid in variable
+name (alphanumeric or underscore). */
 int	char_is_valid(char c)
 {
 	if (c == '\0')

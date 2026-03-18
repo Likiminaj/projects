@@ -6,7 +6,7 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/22 15:28:53 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/03/18 14:05:50 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/03/18 14:12:42 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -107,8 +107,8 @@ void			ft_heredoc_sigint_handler(int sig);
 
 /* LEXER */
 int				ft_token_len(t_token *tokens);
-int				ft_last_token_is_pipe(t_token *tokens);
 int				ft_copy_text(char *word, char quote, int *i, char *clean);
+int				ft_last_token_is_pipe(t_token *tokens);
 void			ft_free_tokens(t_token **list);
 char			*ft_new_clean_word(char *word, int *exit_status);
 char			*ft_strip_quotes(char *word, int *exit_status);
@@ -127,6 +127,7 @@ t_ast			*ft_build_ast_node(t_ast_type type, int *exit_status);
 void			ft_free_ast(t_ast *node);
 void			ft_malloc_error(int *exit_status);
 char			**ft_build_args(t_token **tokens, int *exit_status);
+char			*ft_read_continuation(char *line, int *exit_status);
 
 /* EXPANSION */
 int				ft_expand_ast(t_ast *ast, t_env *env, int *exit_stat);

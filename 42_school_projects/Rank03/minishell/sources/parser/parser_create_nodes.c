@@ -6,7 +6,7 @@
 /*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/25 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/26 16:36:58 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:13:06 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,8 +15,8 @@
 
 t_ast	*ft_build_ast_node(t_ast_type type, int *exit_status);
 void	ft_free_ast(t_ast *node);
-void	ft_malloc_error(int *exit_status);
 
+/* Allocates and initializes an empty AST node of given type. */
 t_ast	*ft_build_ast_node(t_ast_type type, int *exit_status)
 {
 	t_ast	*node;
@@ -32,6 +32,7 @@ t_ast	*ft_build_ast_node(t_ast_type type, int *exit_status)
 	return (node);
 }
 
+/* Recursively frees an AST tree and all its contents. */
 void	ft_free_ast(t_ast *node)
 {
 	if (!node)

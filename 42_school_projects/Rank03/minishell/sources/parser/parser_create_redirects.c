@@ -6,7 +6,7 @@
 /*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/26 17:10:31 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:16:04 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,8 +17,10 @@ t_redirect				*ft_build_redirects(t_token **tokens, int *exit_status);
 static t_redirect		*ft_build_redirect(t_token *token, int *exit_status);
 static t_redirect_type	ft_redirect_type(t_token_type type);
 static int				ft_is_redir(t_token_type t);
-void					red(t_redirect **hd, t_redirect **tp, t_redirect *new);
+void					ft_red(t_redirect **hd, t_redirect **tp,
+							t_redirect *new);
 
+/* Builds a linked list of redirections from the token stream. */
 t_redirect	*ft_build_redirects(t_token **tokens, int *exit_status)
 {
 	t_redirect	*head;
@@ -34,7 +36,7 @@ t_redirect	*ft_build_redirects(t_token **tokens, int *exit_status)
 			new = ft_build_redirect(*tokens, exit_status);
 			if (!new)
 				return (ft_free_redirects(head), NULL);
-			red(&head, &temp, new);
+			ft_red(&head, &temp, new);
 			*tokens = (*tokens)->next;
 			if (*tokens)
 				*tokens = (*tokens)->next;
@@ -45,6 +47,7 @@ t_redirect	*ft_build_redirects(t_token **tokens, int *exit_status)
 	return (head);
 }
 
+/* Creates a single redirection node from a redirect token. */
 static t_redirect	*ft_build_redirect(t_token *token, int *exit_status)
 {
 	t_redirect	*redir;
@@ -70,6 +73,7 @@ static t_redirect	*ft_build_redirect(t_token *token, int *exit_status)
 	return (redir);
 }
 
+/* Maps a token type to its corresponding redirection type. */
 static t_redirect_type	ft_redirect_type(t_token_type type)
 {
 	if (type == TOKEN_REDIRECT_IN)
@@ -81,6 +85,7 @@ static t_redirect_type	ft_redirect_type(t_token_type type)
 	return (REDIR_HEREDOC);
 }
 
+/* Checks if a token type is a redirection operator. */
 static int	ft_is_redir(t_token_type t)
 {
 	return (t == TOKEN_REDIRECT_IN
@@ -89,7 +94,8 @@ static int	ft_is_redir(t_token_type t)
 		|| t == TOKEN_HEREDOC);
 }
 
-void	red(t_redirect **hd, t_redirect **tp, t_redirect *new)
+/* Appends a redirection node to the end of the linked list. */
+void	ft_red(t_redirect **hd, t_redirect **tp, t_redirect *new)
 {
 	if (!*hd)
 		*hd = new;

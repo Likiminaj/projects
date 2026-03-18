@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ast_expansion_redirections.c                       :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/10 15:31:43 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/26 16:52:03 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:04:29 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,8 @@ int		handle_exit_stat(char **result, int *exit_stat, char *var_name);
 void	expansion_error(char *var_name);
 char	*ft_charjoin(char *str, char c);
 
+/* Expands all variables in a string by building result
+character by character. */
 char	*expand_string(char *str, char **envp, int *exit_stat)
 {
 	char	*result;
@@ -47,6 +49,7 @@ char	*expand_string(char *str, char **envp, int *exit_stat)
 	return (result);
 }
 
+/* Expands single variable or exit status and appends to result string. */
 int	str_exp(char *str, char **envp, char **result, int *exit_stat)
 {
 	char	*var_name;
@@ -73,6 +76,7 @@ int	str_exp(char *str, char **envp, char **result, int *exit_stat)
 	return (result_len);
 }
 
+/* Expands $? to exit status number and frees variable name. */
 int	handle_exit_stat(char **result, int *exit_stat, char *var_name)
 {
 	char	*exit_str;
@@ -84,6 +88,7 @@ int	handle_exit_stat(char **result, int *exit_stat, char *var_name)
 	return (2);
 }
 
+/* Prints error message for undefined variable in redirection. */
 void	expansion_error(char *var_name)
 {
 	ft_putstr_fd("minishell: $", 2);
@@ -91,6 +96,7 @@ void	expansion_error(char *var_name)
 	ft_putendl_fd(": ambiguous redirect", 2);
 }
 
+/* Appends single character to string with reallocation and cleanup. */
 char	*ft_charjoin(char *str, char c)
 {
 	char	*new_str;

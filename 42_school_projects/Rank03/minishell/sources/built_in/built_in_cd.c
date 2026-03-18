@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   built_in_cd.c                                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/18 17:00:21 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/03/02 16:26:57 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:07:36 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -65,6 +65,7 @@ int	cd_home(t_env *env)
 	return (0);
 }
 
+/* Changes directory and updates PWD/OLDPWD environment variables. */
 int	exec_cd(t_env *env, char *path)
 {
 	int		index_pwd;

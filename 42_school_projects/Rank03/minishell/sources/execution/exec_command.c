@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   exec_command.c                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/04 16:01:31 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/26 20:16:24 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 14:57:15 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -71,6 +71,8 @@ void	exec_ext_command(char **command, char **envp)
 	}
 }
 
+/* Executes external command in child process with signal and
+redirection setup. */
 void	exec_command_child(t_ast *ast, t_env *env)
 {
 	ft_restore_signals();
@@ -79,6 +81,8 @@ void	exec_command_child(t_ast *ast, t_env *env)
 	exec_ext_command(ast->args, env->envp);
 }
 
+/* Converts child process exit status to shell exit code
+with signal handling. */
 int	handle_child_status(int status)
 {
 	if (WIFSIGNALED(status))

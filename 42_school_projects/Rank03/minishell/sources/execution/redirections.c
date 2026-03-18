@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   redirections.c                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/04 17:23:57 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/03/02 16:31:58 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 14:58:40 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -126,6 +126,7 @@ void	read_heredoc_lines(int write_fd, char *delimiter)
 	}
 }
 
+/* Checks heredoc child exit status and sets signal flag if interrupted. */
 int	check_heredoc_status(int status, int fd)
 {
 	if (WIFEXITED(status) && WEXITSTATUS(status) == 130)

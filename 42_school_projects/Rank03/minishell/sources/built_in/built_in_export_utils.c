@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   built_in_export_utils.c                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 18:10:46 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/04 15:00:31 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:08:48 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,7 @@ int		len_esc_content(char *content);
 char	**copy_envp(char **envp);
 void	bubble_sort_envp(char **envp);
 
+/* Extracts variable name from export argument up to equals sign. */
 char	*var_name_export(char *arg)
 {
 	char	*var_name;
@@ -39,6 +40,8 @@ char	*var_name_export(char *arg)
 	return (var_name);
 }
 
+/* Escapes special characters (quotes, dollar, backslash, backtick)
+in string. */
 char	*escaped_quotes(char *content)
 {
 	int		i;
@@ -66,6 +69,7 @@ char	*escaped_quotes(char *content)
 	return (corrected_content);
 }
 
+/* Calculates length needed for escaped content with special characters. */
 int	len_esc_content(char *content)
 {
 	int	i;
@@ -84,6 +88,7 @@ int	len_esc_content(char *content)
 	return (len);
 }
 
+/* Creates copy of environment array (pointers only, not strings). */
 char	**copy_envp(char **envp)
 {
 	char	**copy;
@@ -106,6 +111,7 @@ char	**copy_envp(char **envp)
 	return (copy);
 }
 
+/* Sorts environment array alphabetically using bubble sort algorithm. */
 void	bubble_sort_envp(char **envp)
 {
 	int		i;

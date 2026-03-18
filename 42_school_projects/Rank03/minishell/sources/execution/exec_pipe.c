@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   exec_pipe.c                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/04 16:01:54 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/26 16:14:22 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 14:58:19 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,8 @@ void	exec_left(t_ast *ast, t_env *env, int *fd);
 void	exec_right(t_ast *ast, t_env *env, int *fd);
 int		fork_error_cleanup(int fd[2]);
 
+/* Executes a pipe by forking left and right commands
+with connected pipe. */
 int	exec_pipe(t_ast *ast, t_env *env)
 {
 	int		fd[2];
@@ -47,6 +49,8 @@ int	exec_pipe(t_ast *ast, t_env *env)
 	return (handle_child_status(status));
 }
 
+/* Executes left side of pipe with stdout
+redirected to pipe write end. */
 void	exec_left(t_ast *ast, t_env *env, int *fd)
 {
 	close(fd[0]);
@@ -57,6 +61,8 @@ void	exec_left(t_ast *ast, t_env *env, int *fd)
 	exit(ft_exec_ast(ast->left, env));
 }
 
+/* Executes right side of pipe with stdin
+redirected from pipe read end. */
 void	exec_right(t_ast *ast, t_env *env, int *fd)
 {
 	close(fd[1]);
@@ -67,6 +73,7 @@ void	exec_right(t_ast *ast, t_env *env, int *fd)
 	exit(ft_exec_ast(ast->right, env));
 }
 
+/* Cleans up pipe file descriptors and restores signals after fork error. */
 int	fork_error_cleanup(int fd[2])
 {
 	ft_interactive_signals();

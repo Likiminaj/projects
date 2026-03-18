@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ast_expansion_command_utils.c                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/22 17:56:27 by cpesty            #+#    #+#             */
-/*   Updated: 2026/02/10 15:29:38 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 15:05:41 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,7 @@ void	swap_new(t_ast *ast, int i, char *new_ast);
 int		find_index_in_env(char **envp, char *var_name);
 char	*find_content(char *argument);
 
+/* Replaces variable with its value from environment in argument string. */
 int	expand_var_ok(t_ast *ast, char *envp, char *n, int i)
 {
 	char	*cont;
@@ -48,6 +49,7 @@ int	expand_var_ok(t_ast *ast, char *envp, char *n, int i)
 	return (free(cont), 0);
 }
 
+/* Removes undefined variable from argument string (expands to empty). */
 int	expand_var_nok(t_ast *ast, char *var_name, int i)
 {
 	char	*new_ast;
@@ -71,6 +73,7 @@ int	expand_var_nok(t_ast *ast, char *var_name, int i)
 	return (0);
 }
 
+/* Frees old argument and replaces with newly expanded string. */
 void	swap_new(t_ast *ast, int i, char *new_ast)
 {
 	if (!new_ast)

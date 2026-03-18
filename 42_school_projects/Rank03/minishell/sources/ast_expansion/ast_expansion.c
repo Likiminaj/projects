@@ -6,7 +6,7 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/19 15:51:07 by cpesty            #+#    #+#             */
-/*   Updated: 2026/02/11 16:42:33 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/18 15:02:57 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,8 @@ int		ft_expand_command(t_ast *ast, t_env *env, int *exit_stat);
 int		ft_expand_redir(t_redirect *redir, t_env *env, int *exit_stat);
 void	restore_sentinels(char *str);
 
+/* Expands variables in AST by recursively processing
+commands and redirections. */
 int	ft_expand_ast(t_ast *ast, t_env *env, int *exit_stat)
 {
 	t_redirect	*redirections;
@@ -47,6 +49,7 @@ int	ft_expand_ast(t_ast *ast, t_env *env, int *exit_stat)
 	return (1);
 }
 
+/* Recursively expands variables in both sides of a pipe. */
 int	ft_expand_pipe(t_ast *ast, t_env *env, int *exit_stat)
 {
 	if (!ft_expand_ast(ast->left, env, exit_stat))
@@ -56,6 +59,7 @@ int	ft_expand_pipe(t_ast *ast, t_env *env, int *exit_stat)
 	return (1);
 }
 
+/* Expands variables in command arguments and restores sentinels. */
 int	ft_expand_command(t_ast *ast, t_env *env, int *exit_stat)
 {
 	int	i;
@@ -76,6 +80,7 @@ int	ft_expand_command(t_ast *ast, t_env *env, int *exit_stat)
 	return (1);
 }
 
+/* Expands variables in redirection filenames and restores sentinels. */
 int	ft_expand_redir(t_redirect *redir, t_env *env, int *exit_stat)
 {
 	char	*expanded;
@@ -94,6 +99,7 @@ int	ft_expand_redir(t_redirect *redir, t_env *env, int *exit_stat)
 	return (1);
 }
 
+/* Converts sentinel characters back to dollar signs after expansion. */
 void	restore_sentinels(char *str)
 {
 	int	i;

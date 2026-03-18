@@ -6,7 +6,7 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/11 16:45:13 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/18 15:16:46 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,7 @@ int		ft_count_words(t_token *tokens);
 void	ft_free_array(char **str);
 void	ft_free_redirects(t_redirect *redirect);
 
+/* Counts word tokens before the next pipe, validating redirections. */
 int	ft_count_words(t_token *tokens)
 {
 	int		i;
@@ -43,6 +44,7 @@ int	ft_count_words(t_token *tokens)
 	return (i);
 }
 
+/* Frees a NULL-terminated array of strings. */
 void	ft_free_array(char **str)
 {
 	int	i;
@@ -58,6 +60,7 @@ void	ft_free_array(char **str)
 	free(str);
 }
 
+/* Frees all nodes in a redirection linked list. */
 void	ft_free_redirects(t_redirect *redirect)
 {
 	t_redirect	*tmp;

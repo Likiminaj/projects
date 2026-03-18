@@ -6,7 +6,7 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/03/11 17:40:41 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/18 15:09:53 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,8 +17,7 @@
 t_ast	*ms_parse(t_token *tokens, int *exit_status);
 t_ast	*ft_build_command(t_token **tokens, int *exit_status);
 
-/* Converts token list into AST, handling pipes
-to create tree structure. */
+/* Entry point: converts token list into an AST tree. */
 t_ast	*ms_parse(t_token *tokens, int *exit_status)
 {
 	t_ast	*ast;
