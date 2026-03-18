@@ -3,16 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   lexer_helpers.c                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/21 16:01:32 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/26 16:48:21 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/11 14:36:11 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../minishell.h"
 #include "../../libft/libft.h"
 
+/* Frees all tokens in the linked list and their word strings. */
 void	ft_free_tokens(t_token **list)
 {
 	t_token	*current;
@@ -31,6 +32,7 @@ void	ft_free_tokens(t_token **list)
 	*list = NULL;
 }
 
+/* Counts how many tokens are in the list. */
 int	ft_token_len(t_token *tokens)
 {
 	int		i;
@@ -48,6 +50,7 @@ int	ft_token_len(t_token *tokens)
 	return (i);
 }
 
+/* Creates a new token for a word, stripping quotes. */
 t_token	*ft_new_word_tok(char *line, int i, int len, int *exit_status)
 {
 	t_token	*tok;
@@ -66,6 +69,7 @@ t_token	*ft_new_word_tok(char *line, int i, int len, int *exit_status)
 	return (tok);
 }
 
+/* Removes quotes from a word while handling sentinels for single quotes. */
 char	*ft_strip_quotes(char *word, int *exit_status)
 {
 	char	*clean;
@@ -95,6 +99,7 @@ char	*ft_strip_quotes(char *word, int *exit_status)
 	return (clean);
 }
 
+/* Allocates memory for cleaned word. */
 char	*ft_new_clean_word(char *word, int *exit_status)
 {
 	char	*clean;

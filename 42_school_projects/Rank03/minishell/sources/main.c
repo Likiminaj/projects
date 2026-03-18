@@ -3,16 +3,52 @@
 /*                                                        :::      ::::::::   */
 /*   main.c                                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/22 15:43:54 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/02/26 16:33:48 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/18 14:06:31 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "minishell.h"
 #include "../libft/libft.h"
 
+void	ft_input_check(int argc);
+int		shell_loop(t_env *env);
+int		ft_process_line(char *line, t_env *env, int exit_status);
+static char	*ft_read_continuation(char *line, int *exit_status);
+/* Runs a minimalist command-line interpreter that mimics basic
+bash functionality. */
+int	main(int argc, char **argv, char **envp)
+{
+	t_env	*env;
+	int		exit_status;
+
+	(void) argv;
+	ft_input_check(argc);
+	env = ft_env_init(envp);
+	if (!env)
+		return (1);
+	ft_interactive_signals();
+	exit_status = shell_loop(env);
+	rl_clear_history();
+	ft_env_free(env);
+	return (exit_status);
+}
+
+/* Checks user input (./minishell) and inform them that any 
+additional argument was not taken into account in the launch. */
+void	ft_input_check(int argc)
+{
+	if (argc > 1)
+	{
+		ft_printf("INFORMATION: Your shell was started but subsequent \
+arguments were ignored.\n");
+	}
+}
+
+/* Checks if Ctrl+C was pressed and update exit status
+ accordingly. */
 static void	ft_check_signal(int *exit_status)
 {
 	if (g_signal == SIGINT)
@@ -22,15 +58,8 @@ static void	ft_check_signal(int *exit_status)
 	}
 }
 
-void	ft_input_check(int argc)
-{
-	if (argc > 1)
-	{
-		ft_printf("Your shell was started but subsequent arguments \
-were ignored");
-	}
-}
-
+/* Reads, save & processes a line inputed by the user until
+an exit_status value is returned. */
 int	shell_loop(t_env *env)
 {
 	char	*line;
@@ -46,6 +75,9 @@ int	shell_loop(t_env *env)
 		if (*line)
 		{
 			add_history(line);
+			line = ft_read_continuation(line, &exit_status);
+			if (!line)
+        		continue ;
 			exit_status = ft_process_line(line, env, exit_status);
 		}
 		free(line);
@@ -54,6 +86,8 @@ int	shell_loop(t_env *env)
 	}
 }
 
+/* Follows the steps to process a line : tokenization,
+AST tree building, expansion, execution. */
 int	ft_process_line(char *line, t_env *env, int exit_status)
 {
 	t_token	*tokens;
@@ -82,19 +116,28 @@ int	ft_process_line(char *line, t_env *env, int exit_status)
 	return (ft_free_ast(ast), exit_status);
 }
 
-int	main(int argc, char **argv, char **envp)
+static char	*ft_read_continuation(char *line, int *exit_status)
 {
-	t_env	*env;
-	int		exit_status;
+	t_token	*tokens;
+	char	*extra;
+	char	*tmp;
 
-	(void) argv;
-	ft_input_check(argc);
-	env = ft_env_init(envp);
-	if (!env)
-		return (1);
-	ft_interactive_signals();
-	exit_status = shell_loop(env);
-	rl_clear_history();
-	ft_env_free(env);
-	return (exit_status);
+	tokens = ft_lex(line, exit_status);
+	while (tokens && ft_last_token_is_pipe(tokens))
+	{
+		ft_free_tokens(&tokens);
+		extra = readline("> ");
+		if (!extra)
+			break ;
+		tmp = ft_strjoin(line, " ");
+		free(line);
+		line = ft_strjoin(tmp, extra);
+		free(tmp);
+		free(extra);
+		if (!line)
+			return (NULL);
+		tokens = ft_lex(line, exit_status);
+	}
+	ft_free_tokens(&tokens);
+	return (line);
 }

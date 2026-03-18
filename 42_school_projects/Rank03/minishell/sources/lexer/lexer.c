@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   lexer.c                                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/21 16:01:32 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/26 16:35:55 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/11 14:29:31 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,6 +21,7 @@ static int	ft_add_word(char *line, int i, t_token **list,
 static int	ft_token_type(char c1, char c2, t_token_type *type);
 static void	ft_append_token(t_token **list, t_token *tok);
 
+/* Converts input string into a linked list of tokens. */
 t_token	*ft_lex(char *line, int *exit_status)
 {
 	int		i;
@@ -50,6 +51,32 @@ t_token	*ft_lex(char *line, int *exit_status)
 	return (list);
 }
 
+/* Create a token for operators (|, <, >, <<, >>). */
+static int	ft_add_operator(char *line, int i, t_token **list,
+			int *exit_status)
+{
+	int				j;
+	t_token			*tok;
+	t_token_type	type;
+
+	j = ft_token_type(line[i], line[i + 1], &type);
+	if (j == 0)
+	{
+		ft_putendl_fd("minishell: syntax error: token\n", 2);
+		*exit_status = 2;
+		return (-1);
+	}
+	tok = malloc(sizeof(t_token));
+	if (!tok)
+		return (ft_malloc_error(exit_status), -1);
+	tok->word = NULL;
+	tok->next = NULL;
+	tok->type = type;
+	ft_append_token(list, tok);
+	return (j);
+}
+
+/* Creates a token for a word (command/argument/filename). */
 static int	ft_add_word(char *line, int i, t_token **list,
 			int *exit_status)
 {
@@ -69,30 +96,7 @@ static int	ft_add_word(char *line, int i, t_token **list,
 	return (len);
 }
 
-static int	ft_add_operator(char *line, int i, t_token **list,
-			int *exit_status)
-{
-	int				j;
-	t_token			*tok;
-	t_token_type	type;
-
-	j = ft_token_type(line[i], line[i + 1], &type);
-	if (j == 0)
-	{
-		ft_putendl_fd("minishell: syntax error: token c", 2);
-		*exit_status = 2;
-		return (-1);
-	}
-	tok = malloc(sizeof(t_token));
-	if (!tok)
-		return (ft_malloc_error(exit_status), -1);
-	tok->word = NULL;
-	tok->next = NULL;
-	tok->type = type;
-	ft_append_token(list, tok);
-	return (j);
-}
-
+/* Determine which operator and its length. */
 static int	ft_token_type(char c1, char c2, t_token_type *type)
 {
 	if (c1 == '|')
@@ -108,6 +112,7 @@ static int	ft_token_type(char c1, char c2, t_token_type *type)
 	return (0);
 }
 
+/* Add token to end of linked list. */
 static void	ft_append_token(t_token **list, t_token *tok)
 {
 	t_token	*i;

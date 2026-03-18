@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   signals.c                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/12 15:23:45 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/26 16:19:58 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/11 12:02:17 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,6 +23,7 @@ void	ft_restore_signals(void);
 void	ft_heredoc_signals(void);
 void	ft_heredoc_sigint_handler(int sig);
 
+/* Sets up signals handling. */
 void	ft_interactive_signals(void)
 {
 	struct sigaction	sa;
@@ -34,6 +35,7 @@ void	ft_interactive_signals(void)
 	signal(SIGQUIT, SIG_IGN);
 }
 
+/* ctrl + c handling -> ^C + prompt continue in a new line. */
 void	ft_sigint_handler(int sig)
 {
 	g_signal = sig;
@@ -43,18 +45,21 @@ void	ft_sigint_handler(int sig)
 	rl_redisplay();
 }
 
+/* Restores signals to default behavior for child processes. */
 void	ft_restore_signals(void)
 {
 	signal(SIGINT, SIG_DFL);
 	signal(SIGQUIT, SIG_DFL);
 }
 
+/* Sets up special signal handling for heredoc child process. */
 void	ft_heredoc_signals(void)
 {
 	signal(SIGINT, ft_heredoc_sigint_handler);
 	signal(SIGQUIT, SIG_IGN);
 }
 
+/* Handles Ctrl+C inside a heredoc (<<) to go back to prompt. */
 void	ft_heredoc_sigint_handler(int sig)
 {
 	g_signal = sig;

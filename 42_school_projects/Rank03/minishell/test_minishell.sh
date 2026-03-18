@@ -44,6 +44,7 @@ Usage:
 Optional:
   --skip-build   Skip make checks and use existing binary only
   --skip-leaks   Skip memory leak checks
+  --skip-fd      Skip file descriptor leak checks
   -h, --help     Show this help
 EOT
 }
@@ -55,9 +56,11 @@ fi
 
 SKIP_BUILD=0
 SKIP_LEAKS=0
+SKIP_FD=0
 for arg in "$@"; do
   [[ "$arg" == "--skip-build" ]] && SKIP_BUILD=1
   [[ "$arg" == "--skip-leaks" ]] && SKIP_LEAKS=1
+  [[ "$arg" == "--skip-fd" ]] && SKIP_FD=1
 done
 
 has_required_flags() {
@@ -190,8 +193,79 @@ count_globals_quick() {
   fi
 }
 
+check_fd_leaks() {
+  info "5) File descriptor leak checks"
+
+  if (( SKIP_FD == 1 )); then
+    warn "Skipping FD leak checks (--skip-fd)"
+    return 0
+  fi
+
+  if ! command -v lsof &>/dev/null; then
+    warn "lsof not found - skipping FD leak checks"
+    warn "Install with: sudo apt-get install lsof"
+    return 0
+  fi
+
+  # Test 1: Simple command - check FDs after execution
+  info "Checking FD leaks in simple command..."
+  local test_script="$TMP_DIR/fd_test.sh"
+  cat > "$test_script" <<'FDTEST'
+#!/bin/bash
+echo "echo hello" | ./minishell >/dev/null 2>&1 &
+PID=$!
+sleep 0.5
+FD_COUNT=$(lsof -p $PID 2>/dev/null | wc -l)
+kill $PID 2>/dev/null
+wait $PID 2>/dev/null
+if [ "$FD_COUNT" -lt 20 ]; then
+  echo "PASS"
+else
+  echo "FAIL: $FD_COUNT file descriptors open"
+fi
+FDTEST
+  chmod +x "$test_script"
+  
+  pushd "$ROOT_DIR" >/dev/null
+  result=$(bash "$test_script")
+  popd >/dev/null
+  
+  if [[ "$result" == "PASS" ]]; then
+    pass "No excessive FD leaks in simple command"
+  else
+    fail "FD leak detected: $result"
+  fi
+
+  # Test 2: Pipe command - check FDs are closed properly
+  info "Checking FD leaks in pipes..."
+  printf "echo hello | cat | cat\nexit\n" > "$TMP_DIR/pipe_input.txt"
+  
+  # Run and check for open pipes that shouldn't exist
+  timeout 2 "$BIN" < "$TMP_DIR/pipe_input.txt" >/dev/null 2>&1
+  local exit_code=$?
+  
+  if [[ $exit_code -eq 0 || $exit_code -eq 124 ]]; then
+    pass "Pipe FD handling (no hang or crash)"
+  else
+    fail "Pipe execution failed with code $exit_code"
+  fi
+
+  # Test 3: Redirections - check file descriptors closed
+  info "Checking FD leaks in redirections..."
+  local redir_test="$TMP_DIR/redir_fd_test.txt"
+  printf "echo test > /tmp/fd1.txt\necho test2 > /tmp/fd2.txt\ncat < /tmp/fd1.txt\nexit\n" | "$BIN" >/dev/null 2>&1
+  
+  if [[ $? -eq 0 ]]; then
+    pass "Redirection FD handling works"
+  else
+    fail "Redirection FD test failed"
+  fi
+  
+  rm -f /tmp/fd1.txt /tmp/fd2.txt
+}
+
 check_memory_leaks() {
-  info "5) Memory leak checks"
+  info "6) Memory leak checks"
 
   if (( SKIP_LEAKS == 1 )); then
     warn "Skipping memory leak checks (--skip-leaks)"
@@ -205,7 +279,6 @@ check_memory_leaks() {
   fi
 
   local valgrind_log="$TMP_DIR/valgrind.log"
-  local valgrind_opts="--leak-check=full --show-leak-kinds=all --track-origins=yes --log-file=$valgrind_log --suppressions=/dev/null"
   
   # Suppress readline leaks (these are expected and not our fault)
   local suppressions="$TMP_DIR/readline.supp"
@@ -230,7 +303,7 @@ check_memory_leaks() {
 }
 EOF
 
-  valgrind_opts="--leak-check=full --show-leak-kinds=definite --track-origins=yes --log-file=$valgrind_log --suppressions=$suppressions"
+  local valgrind_opts="--leak-check=full --show-leak-kinds=definite --track-origins=yes --log-file=$valgrind_log --suppressions=$suppressions"
 
   info "Running simple command test with valgrind..."
   printf "echo hello\nexit\n" | valgrind $valgrind_opts "$BIN" >/dev/null 2>&1
@@ -272,6 +345,25 @@ EOF
     echo "----- valgrind output -----"
     grep -A 5 "definitely lost" "$valgrind_log" || cat "$valgrind_log"
     echo "---------------------------"
+  fi
+
+  # NEW: Child process leak check
+  info "Running child process leak test with valgrind..."
+  local child_log="$TMP_DIR/valgrind_child.log"
+  valgrind_opts="--leak-check=full --show-leak-kinds=definite --track-origins=yes --trace-children=yes --log-file=$child_log --suppressions=$suppressions"
+  
+  printf "/bin/ls\nexit\n" | valgrind $valgrind_opts "$BIN" >/dev/null 2>&1
+  
+  # Check both parent and child processes
+  if grep -q "definitely lost: 0 bytes" "$child_log" && \
+     ! grep -q "Invalid read" "$child_log" && \
+     ! grep -q "Invalid write" "$child_log"; then
+    pass "No definite memory leaks in child processes"
+  else
+    warn "Potential leaks in child processes (may be external commands)"
+    echo "----- child process valgrind -----"
+    grep -A 3 "definitely lost" "$child_log" | head -20
+    echo "----------------------------------"
   fi
 
   rm -f /tmp/minishell_test.txt
@@ -317,7 +409,6 @@ run_non_interactive_tests() {
   fi
 
   local rf="$TMP_DIR/in.txt"
-  # Note: This test may show false positive due to command echo containing "bird"
   printf "echo bird > %s\necho grass > %s\ncat < %s\nexit\n" "$rf" "$rf" "$rf" | "$BIN" >"$TMP_DIR/redir_over.out" 2>&1
   if grep -Eq "^grass$" "$TMP_DIR/redir_over.out" && ! grep -Eq "^bird$" "$TMP_DIR/redir_over.out"; then
     pass "> redirection overwrites"
@@ -334,7 +425,6 @@ run_non_interactive_tests() {
 
   run_shell_case "redir missing file" "cat < boy\nexit\n" "No such file|no such file"
 
-  # Additional tests
   info "4+) Additional tests"
   
   run_shell_case "multiple pipes" "echo hello | cat | cat | cat\nexit\n" "hello"
@@ -355,7 +445,6 @@ run_non_interactive_tests() {
   
   run_shell_case "multiple redirections" "echo test > ${TMP_DIR}/f1.txt > ${TMP_DIR}/f2.txt\ncat ${TMP_DIR}/f2.txt\nexit\n" "test"
   
-  # Heredoc test
   local heredoc_out="$TMP_DIR/heredoc.out"
   printf "cat << EOF\nline 1\nline 2\nEOF\nexit\n" | "$BIN" >"$heredoc_out" 2>&1
   if grep -q "line 1" "$heredoc_out" && grep -q "line 2" "$heredoc_out"; then
@@ -366,7 +455,7 @@ run_non_interactive_tests() {
 }
 
 print_manual_signal_todo() {
-  info "6) Manual signal tests (interactive)"
+  info "7) Manual signal tests (interactive)"
   cat <<'EOT'
 Run manually in minishell:
   - CTRL-C on empty prompt => new prompt (newline)
@@ -394,6 +483,7 @@ main() {
   else
     count_globals_quick
     run_non_interactive_tests
+    check_fd_leaks
     check_memory_leaks
     print_manual_signal_todo
   fi

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   init_free_env.c                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/12 15:24:51 by lraghave          #+#    #+#             */
-/*   Updated: 2026/02/17 13:59:32 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/11 12:01:29 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,8 @@ static void	init_pwd(t_env *env);
 void		ft_env_free(t_env *env);
 void		free_array(char **array);
 
+/* Creates and initializes the shell's environment structure 
+with a copy of system environment variables. */
 t_env	*ft_env_init(char **envp)
 {
 	int		count;
@@ -46,6 +48,7 @@ t_env	*ft_env_init(char **envp)
 	return (env);
 }
 
+/* Copies all env variables. */
 static int	ft_envp_init(t_env *env, char **envp, int count)
 {
 	int	i;
@@ -72,6 +75,7 @@ static int	ft_envp_init(t_env *env, char **envp, int count)
 	return (1);
 }
 
+/* Initializes PWD variable to ensure built-in fucntions runs well. */
 static void	init_pwd(t_env *env)
 {
 	char	*cwd;
@@ -84,6 +88,7 @@ static void	init_pwd(t_env *env)
 	}
 }
 
+/* Frees env structure. */
 void	ft_env_free(t_env *env)
 {
 	int	i;
@@ -100,6 +105,7 @@ void	ft_env_free(t_env *env)
 	free(env);
 }
 
+/* Frees any given regular array. */
 void	free_array(char **array)
 {
 	int	i;
