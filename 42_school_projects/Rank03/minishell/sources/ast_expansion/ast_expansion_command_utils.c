@@ -3,106 +3,64 @@
 /*                                                        :::      ::::::::   */
 /*   ast_expansion_command_utils.c                      :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/22 17:56:27 by cpesty            #+#    #+#             */
-/*   Updated: 2026/03/18 15:05:41 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/20 19:58:38 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../minishell.h"
 #include "../../libft/libft.h"
 
-int		expand_var_ok(t_ast *ast, char *envp, char *var_name, int i);
-int		expand_var_nok(t_ast *ast, char *var_name, int i);
-void	swap_new(t_ast *ast, int i, char *new_ast);
-int		find_index_in_env(char **envp, char *var_name);
+int		expand_var_ok(char **arg, char *entry, char *vname, int prot);
+int		expand_var_nok(char **arg_ptr, char *var_name);
 char	*find_content(char *argument);
+void	fill_new_arg(char *new, char *src, char *cont, int vlen);
+void	swap_new(char **arg_ptr, char *new_arg);
 
-/* Replaces variable with its value from environment in argument string. */
-int	expand_var_ok(t_ast *ast, char *envp, char *n, int i)
+/* Replaces variable with env value in *arg.
+prot=1: spaces in the value are marked \x02 (double-quoted, no word split). */
+int	expand_var_ok(char **arg, char *entry, char *vname, int prot)
 {
-	char	*cont;
-	char	*new_ast;
-	int		j;
-	int		k;
-	int		len;
+	char	*content;
+	char	*new_arg;
 
-	cont = find_content(envp);
-	if (cont == NULL)
+	content = find_content(entry);
+	if (content && prot)
+		content = protect_spaces(content);
+	if (!content)
 		return (1);
-	new_ast = malloc(ft_strlen(ast->args[i]) - ft_strlen(n) + ft_strlen(cont));
-	if (!new_ast)
-		return (1);
-	j = 0;
-	k = 0;
-	while (ast->args[i][k] != '$')
-		new_ast[j++] = ast->args[i][k++];
-	len = ft_strlen(n) + k + 1;
-	k = 0;
-	while (cont[k] != '\0')
-		new_ast[j++] = cont[k++];
-	while (ast->args[i][len] != '\0')
-		new_ast[j++] = ast->args[i][len++];
-	new_ast[j] = '\0';
-	swap_new(ast, i, new_ast);
-	return (free(cont), 0);
+	new_arg = malloc(ft_strlen(*arg) - ft_strlen(vname) + ft_strlen(content));
+	if (!new_arg)
+		return (free(content), 1);
+	fill_new_arg(new_arg, *arg, content, ft_strlen(vname));
+	swap_new(arg, new_arg);
+	return (free(content), 0);
 }
 
-/* Removes undefined variable from argument string (expands to empty). */
-int	expand_var_nok(t_ast *ast, char *var_name, int i)
+/* Removes undefined variable from *arg_ptr (expands to empty string). */
+int	expand_var_nok(char **arg_ptr, char *var_name)
 {
-	char	*new_ast;
+	char	*new_arg;
 	int		j;
 	int		k;
 	int		len;
 
-	new_ast = malloc(ft_strlen(ast->args[i]) - ft_strlen(var_name));
-	if (!new_ast)
+	new_arg = malloc(ft_strlen(*arg_ptr) - ft_strlen(var_name));
+	if (!new_arg)
 		return (1);
 	len = ft_strlen(var_name);
 	j = 0;
 	k = 0;
-	while (ast->args[i][k] != '$')
-		new_ast[j++] = ast->args[i][k++];
+	while ((*arg_ptr)[k] != '$')
+		new_arg[j++] = (*arg_ptr)[k++];
 	len += (k + 1);
-	while (ast->args[i][len] != '\0')
-		new_ast[j++] = ast->args[i][len++];
-	new_ast[j] = '\0';
-	swap_new(ast, i, new_ast);
+	while ((*arg_ptr)[len] != '\0')
+		new_arg[j++] = (*arg_ptr)[len++];
+	new_arg[j] = '\0';
+	swap_new(arg_ptr, new_arg);
 	return (0);
-}
-
-/* Frees old argument and replaces with newly expanded string. */
-void	swap_new(t_ast *ast, int i, char *new_ast)
-{
-	if (!new_ast)
-		return ;
-	free(ast->args[i]);
-	ast->args[i] = new_ast;
-}
-
-/* Looks for a specific variable in the environement.
-Returns the index of this variable in the env array. */
-int	find_index_in_env(char **envp, char *var_name)
-{
-	int		i;
-	size_t	var_len;		
-
-	if (!envp || !var_name)
-		return (-1);
-	var_len = ft_strlen(var_name);
-	if (var_len == 0)
-		return (-1);
-	i = 0;
-	while (envp[i] != NULL)
-	{
-		if ((ft_strncmp(envp[i], var_name, var_len) == 0) \
-&& envp[i][var_len] == '=')
-			return (i);
-		i++;
-	}
-	return (-1);
 }
 
 /* Receives an argument such as "var_name=content" and extracts
@@ -117,4 +75,34 @@ char	*find_content(char *argument)
 	if (!equal_start)
 		return (NULL);
 	return (ft_strdup(equal_start + 1));
+}
+
+/* Variable ($VAR) in source string is replaced with content of the variable
+that was found in env (*new).*/
+void	fill_new_arg(char *new, char *src, char *cont, int vlen)
+{
+	int	j;
+	int	k;
+	int	len;
+
+	j = 0;
+	k = 0;
+	while (src[k] != '$')
+		new[j++] = src[k++];
+	len = vlen + k + 1;
+	k = 0;
+	while (cont[k])
+		new[j++] = cont[k++];
+	while (src[len])
+		new[j++] = src[len++];
+	new[j] = '\0';
+}
+
+/* Frees old argument string and replaces it with the newly built one. */
+void	swap_new(char **arg_ptr, char *new_arg)
+{
+	if (!new_arg)
+		return ;
+	free(*arg_ptr);
+	*arg_ptr = new_arg;
 }

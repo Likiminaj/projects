@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ast_expansion.c                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/19 15:51:07 by cpesty            #+#    #+#             */
-/*   Updated: 2026/03/18 15:02:57 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/20 18:28:54 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,20 +59,29 @@ int	ft_expand_pipe(t_ast *ast, t_env *env, int *exit_stat)
 	return (1);
 }
 
-/* Expands variables in command arguments and restores sentinels. */
+/* Expands variables in command arguments, splits on space/tab/newline,
+restores sentinels. */
 int	ft_expand_command(t_ast *ast, t_env *env, int *exit_stat)
 {
+	int	count;
 	int	i;
+	int	added;
 
 	if (!ast || !ast->args)
 		return (1);
+	count = ft_count_args(ast->args);
 	i = 0;
-	while (ast->args[i] != NULL)
+	while (i < count)
 	{
 		if (dol_found(ast->args[i]) > 0 && !is_dol_only(ast->args[i]))
 		{
 			if (expand_var(ast, i, exit_stat, env->envp) == 1)
 				return (0);
+			added = ft_word_split(&ast->args, i, count);
+			if (added == -1)
+				return (0);
+			count += added;
+			i += added;
 		}
 		restore_sentinels(ast->args[i]);
 		i++;
@@ -111,6 +120,8 @@ void	restore_sentinels(char *str)
 	{
 		if (str[i] == '\x01')
 			str[i] = '$';
+		else if (str[i] == '\x02')
+			str[i] = ' ';
 		i++;
 	}
 }

@@ -3,15 +3,21 @@
 /*                                                        :::      ::::::::   */
 /*   lexer_helpers.c                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/21 16:01:32 by lraghave          #+#    #+#             */
-/*   Updated: 2026/03/11 14:36:11 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/20 18:55:14 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../minishell.h"
 #include "../../libft/libft.h"
+
+void	ft_free_tokens(t_token **list);
+int		ft_token_len(t_token *tokens);
+t_token	*ft_new_word_tok(char *line, int i, int len, int *exit_status);
+char	*ft_strip_quotes(char *word, int *exit_status);
+char	*ft_new_clean_word(char *word, int *exit_status);
 
 /* Frees all tokens in the linked list and their word strings. */
 void	ft_free_tokens(t_token **list)

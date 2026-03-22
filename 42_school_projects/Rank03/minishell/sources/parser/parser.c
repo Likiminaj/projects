@@ -6,7 +6,7 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/03/18 15:09:53 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/03/18 16:12:31 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,7 +23,7 @@ t_ast	*ms_parse(t_token *tokens, int *exit_status)
 	t_ast	*ast;
 	t_ast	*pipe;
 
-	if (!tokens)
+	if (!tokens || ft_syntax_error_pipe(tokens, exit_status))
 		return (NULL);
 	ast = ft_build_command(&tokens, exit_status);
 	if (!ast)

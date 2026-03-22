@@ -6,7 +6,7 @@
 /*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 11:21:27 by lraghave          #+#    #+#             */
-/*   Updated: 2026/03/18 15:16:46 by lraghave         ###   ########.fr       */
+/*   Updated: 2026/03/18 16:17:06 by lraghave         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -72,4 +72,16 @@ void	ft_free_redirects(t_redirect *redirect)
 		free(redirect);
 		redirect = tmp;
 	}
+}
+
+int	ft_syntax_error_pipe(t_token *tokens, int *exit_status)
+{
+	if (tokens && tokens->type == TOKEN_PIPE)
+	{
+		ft_putendl_fd(
+			"minishell: syntax error near unexpected token `|'", 2);
+		*exit_status = 2;
+		return (1);
+	}
+	return (0);
 }

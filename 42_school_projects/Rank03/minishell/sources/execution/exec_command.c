@@ -3,43 +3,21 @@
 /*                                                        :::      ::::::::   */
 /*   exec_command.c                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/04 16:01:31 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/03/18 14:57:15 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/20 15:35:18 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../minishell.h"
 #include "../../libft/libft.h"
 
-int		exec_command(t_ast *ast, t_env *env);
 void	exec_ext_command(char **command, char **envp);
 void	exec_command_child(t_ast *ast, t_env *env);
 int		handle_child_status(int status);
-
-/* Analyses the given command and execute it.
-Redirect input/output if necessary. */
-int	exec_command(t_ast *ast, t_env *env)
-{
-	int		status;
-	pid_t	pid;
-
-	if (!ast->args || !ast->args[0])
-		return (0);
-	if (is_built_in(ast->args[0]) == 1)
-		return (execute_built_in_redirections(ast, env));
-	signal(SIGINT, SIG_IGN);
-	signal(SIGQUIT, SIG_IGN);
-	pid = fork();
-	if ((pid) == -1)
-		return (ft_interactive_signals(), perror("fork"), 1);
-	if (pid == 0)
-		exec_command_child(ast, env);
-	waitpid(pid, &status, 0);
-	ft_interactive_signals();
-	return (handle_child_status(status));
-}
+int		handle_redirections(t_redirect *redirects, int line_count);
+void	redir_err(t_redirect *current);
 
 /* Execute in a child process an external command given by user. */
 void	exec_ext_command(char **command, char **envp)
@@ -75,9 +53,9 @@ void	exec_ext_command(char **command, char **envp)
 redirection setup. */
 void	exec_command_child(t_ast *ast, t_env *env)
 {
-	ft_restore_signals();
-	if (handle_redirections(ast->redirects) == -1)
+	if (handle_redirections(ast->redirects, env->line_count) == -1)
 		exit(1);
+	ft_restore_signals();
 	exec_ext_command(ast->args, env->envp);
 }
 
@@ -89,9 +67,49 @@ int	handle_child_status(int status)
 	{
 		if (WTERMSIG(status) == SIGINT)
 			write(1, "\n", 1);
+		else if (WTERMSIG(status) == SIGQUIT)
+			ft_putendl_fd("Quit (core dumped)", 1);
 		return (128 + WTERMSIG(status));
 	}
 	if (WIFEXITED(status))
 		return (WEXITSTATUS(status));
 	return (1);
+}
+
+/* Handles < (input), > (output), >> (append), << (heredoc).*/
+int	handle_redirections(t_redirect *redirects, int line_count)
+{
+	t_redirect	*current;
+	int			fd;
+
+	current = redirects;
+	while (current)
+	{
+		if (current->type == REDIR_IN)
+			fd = open(current->file, O_RDONLY);
+		else if (current->type == REDIR_OUT)
+			fd = open(current->file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		else if (current->type == REDIR_APPEND)
+			fd = open(current->file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+		else if (current->type == REDIR_HEREDOC)
+			fd = heredoc_handling(current->file, line_count);
+		if (fd == -1)
+			return (redir_err(current), -1);
+		if (current->type == REDIR_IN || current->type == REDIR_HEREDOC)
+			dup2(fd, STDIN_FILENO);
+		else
+			dup2(fd, STDOUT_FILENO);
+		close(fd);
+		current = current->next;
+	}
+	return (0);
+}
+
+/* Only prints redirection error if not a signal-interrupted heredoc. */
+void	redir_err(t_redirect *current)
+{
+	if (current->type == REDIR_HEREDOC && g_signal)
+		return ;
+	ft_putstr_fd("minishell: ", 2);
+	perror(current->file);
 }

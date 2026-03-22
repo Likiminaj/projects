@@ -3,17 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   lexer.c                                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/21 16:01:32 by lraghave          #+#    #+#             */
-/*   Updated: 2026/03/11 14:29:31 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/20 18:55:49 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../minishell.h"
 #include "../../libft/libft.h"
 
-// prototype(s)
+t_token		*ft_lex(char *line, int *exit_status);
 static int	ft_add_operator(char *line, int i, t_token **list,
 				int *exit_status);
 static int	ft_add_word(char *line, int i, t_token **list,

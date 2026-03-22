@@ -30,6 +30,7 @@ SOURCES = \
     sources/ast_expansion/ast_expansion_utils.c \
     sources/ast_expansion/ast_expansion_command.c \
     sources/ast_expansion/ast_expansion_redirections.c \
+    sources/ast_expansion/ast_expansion_word_split.c \
     sources/built_in/built_in_cd.c \
     sources/built_in/built_in_env.c \
     sources/built_in/built_in_export.c \
@@ -45,6 +46,7 @@ SOURCES = \
     sources/execution/exec_pipe.c \
     sources/execution/execution.c \
     sources/execution/redirections.c \
+    sources/execution/redirections_utils.c \
     sources/lexer/lexer.c \
     sources/lexer/lexer_helpers.c \
     sources/lexer/lexer_helpers2.c \

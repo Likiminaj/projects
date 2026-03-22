@@ -75,6 +75,7 @@ int	shell_loop(t_env *env)
 		if (*line)
 		{
 			add_history(line);
+			env->line_count++;
 			line = ft_read_continuation(line, &exit_status);
 			if (!line)
 				continue ;

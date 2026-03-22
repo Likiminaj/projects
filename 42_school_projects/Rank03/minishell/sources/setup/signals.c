@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   signals.c                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/12 15:23:45 by lraghave          #+#    #+#             */
-/*   Updated: 2026/03/11 12:02:17 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/19 17:35:28 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -63,6 +63,6 @@ void	ft_heredoc_signals(void)
 void	ft_heredoc_sigint_handler(int sig)
 {
 	g_signal = sig;
-	write(1, "\n", 1);
+	write(1, "^C\n", 3);
 	exit(130);
 }

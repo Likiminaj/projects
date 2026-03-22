@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ast_expansion_command.c                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/10 15:28:37 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/03/18 15:05:10 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/20 19:58:01 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,29 +16,34 @@
 int		expand_var(t_ast *ast, int i, int *exit_status, char **envp);
 char	*find_var_name(char *arg);
 int		expand_error_code(t_ast *ast, int i, int *exit_status);
-int		expand_fst_var(t_ast *ast, char **envp, char *var_name, int i);
+int		expand_fst_var(char **arg, char **envp, char *vname, int prot);
+int		find_index_in_env(char **envp, char *var_name);
 
 /* Expands all variables in command argument by finding and replacing
-each $VAR. */
+each $VAR or \x03VAR (double-quoted dollar). */
 int	expand_var(t_ast *ast, int i, int *exit_status, char **envp)
 {
 	int		j;
 	char	*var_name;
+	int		protect;
 
 	while (1)
 	{
 		j = 0;
-		while (ast->args[i][j] && ast->args[i][j] != '$')
+		while (ast->args[i][j] && ast->args[i][j] != '$' && \
+ast->args[i][j] != '\x03')
 			j++;
 		if (!ast->args[i][j])
 			break ;
+		protect = (ast->args[i][j] == '\x03');
+		ast->args[i][j] = '$';
 		var_name = find_var_name(ast->args[i] + j);
 		if (!var_name)
 			break ;
 		if (var_name[0] == '?' && var_name[1] == '\0')
 			expand_error_code(ast, i, exit_status);
 		else
-			expand_fst_var(ast, envp, var_name, i);
+			expand_fst_var(&ast->args[i], envp, var_name, protect);
 		free(var_name);
 	}
 	return (0);
@@ -100,25 +105,49 @@ int	expand_error_code(t_ast *ast, int i, int *exit_status)
 	while (ast->args[i][len] != '\0')
 		new_ast[j++] = ast->args[i][len++];
 	new_ast[j] = '\0';
-	swap_new(ast, i, new_ast);
+	swap_new(&ast->args[i], new_ast);
 	return (free(error_number), 0);
 }
 
-/* Expands first variable in argument by checking environment and replacing. */
-int	expand_fst_var(t_ast *ast, char **envp, char *var_name, int i)
+/* Expands first variable in *arg by checking environment and replacing.
+prot=1 means the dollar was double-quoted: spaces in result are protected. */
+int	expand_fst_var(char **arg, char **envp, char *vname, int prot)
 {
 	int	index;
 
-	index = find_index_in_env(envp, var_name);
+	index = find_index_in_env(envp, vname);
 	if (index != -1)
 	{
-		if (expand_var_ok(ast, envp[index], var_name, i) == 1)
+		if (expand_var_ok(arg, envp[index], vname, prot) == 1)
 			return (1);
 	}
 	else
 	{
-		if (expand_var_nok(ast, var_name, i) == 1)
+		if (expand_var_nok(arg, vname) == 1)
 			return (1);
 	}
 	return (0);
+}
+
+/* Looks for a specific variable in the environment.
+Returns the index of this variable in the env array. */
+int	find_index_in_env(char **envp, char *var_name)
+{
+	int		i;
+	size_t	var_len;
+
+	if (!envp || !var_name)
+		return (-1);
+	var_len = ft_strlen(var_name);
+	if (var_len == 0)
+		return (-1);
+	i = 0;
+	while (envp[i] != NULL)
+	{
+		if ((ft_strncmp(envp[i], var_name, var_len) == 0) \
+&& envp[i][var_len] == '=')
+			return (i);
+		i++;
+	}
+	return (-1);
 }

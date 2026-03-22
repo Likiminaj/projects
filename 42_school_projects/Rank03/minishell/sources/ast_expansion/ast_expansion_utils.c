@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ast_expansion_utils.c                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
+/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/19 18:37:07 by cpesty            #+#    #+#             */
-/*   Updated: 2026/03/18 15:03:34 by cpesty           ###   ########.fr       */
+/*   Updated: 2026/03/20 18:53:39 by chlpesty         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 
 int		dol_found(char *argument);
 int		is_dol_only(char *argument);
+int		ft_count_args(char **args);
 int		char_is_valid(char c);
 
 /* Counts number of dollar signs in a string for variable expansion check. */
@@ -27,7 +28,7 @@ int	dol_found(char *argument)
 	count = 0;
 	while (argument[i] != '\0' && argument[i + 1] != '\0')
 	{
-		if (argument[i] == '$')
+		if (argument[i] == '$' || argument[i] == '\x03')
 			count++;
 		i++;
 	}
@@ -37,9 +38,20 @@ int	dol_found(char *argument)
 /* Checks if string is a lone dollar sign with no variable name. */
 int	is_dol_only(char *argument)
 {
-	if (argument[0] == '$' && argument[1] == '\0')
+	if ((argument[0] == '$' || argument[0] == '\x03') && argument[1] == '\0')
 		return (1);
 	return (0);
+}
+
+/* Counts the number of non-NULL arguments in an args array. */
+int	ft_count_args(char **args)
+{
+	int	i;
+
+	i = 0;
+	while (args[i])
+		i++;
+	return (i);
 }
 
 /* Validates if character is valid in variable
