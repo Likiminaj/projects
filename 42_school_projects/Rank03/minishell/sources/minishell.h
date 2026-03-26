@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   minishell.h                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: chlpesty <chlpesty@student.42.fr>          +#+  +:+       +#+        */
+/*   By: cpesty <chlpesty@gmail.com>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/22 15:28:53 by chlpesty          #+#    #+#             */
-/*   Updated: 2026/03/20 18:58:12 by chlpesty         ###   ########.fr       */
+/*   Updated: 2026/03/22 13:05:59 by cpesty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -31,7 +31,7 @@
 # define LIT_SPACE '\x02'
 # define QUOTED_DOL '\x03'
 # ifndef ECHOCTL
-#  define ECHOCTL 0x00000200
+#  define ECHOCTL 0x00000200 /* Standard bit value for ECHOCTL on Linux */
 # endif
 
 /* GLOBAL VARIABLE */
