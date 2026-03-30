@@ -34,16 +34,21 @@ router.get('/categories', async (req, res) => {
     const txDb    = await notion.databases.retrieve({ database_id: TRANSACTIONS_DB() })
     const sources = (txDb.properties.Source?.select?.options ?? []).map(o => ({ name: o.name, color: o.color }))
 
-    if (CATEGORIES_DB()) {
+    // Resolve categories DB: env var → auto-discover from relation → select options fallback
+    let catDbId = CATEGORIES_DB()
+    if (!catDbId) {
+      catDbId = txDb.properties.Category?.relation?.database_id ?? null
+    }
+
+    if (catDbId) {
       const catPages = await notion.databases.query({
-        database_id: CATEGORIES_DB(),
-        filter: { property: 'Active', checkbox: { equals: true } },
-        sorts:  [{ property: 'Name',  direction: 'ascending'  }],
+        database_id: catDbId,
+        sorts: [{ property: 'Name', direction: 'ascending' }],
       })
       return res.json({ success: true, data: { categories: catPages.results.map(mapCat), sources } })
     }
 
-    // Legacy fallback
+    // Last resort: read select options directly from the Category field
     const pick = prop => (txDb.properties[prop]?.select?.options ?? []).map(o => ({ name: o.name, color: o.color }))
     res.json({ success: true, data: { categories: pick('Category'), sources } })
   } catch (err) {

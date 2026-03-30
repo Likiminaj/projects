@@ -41,16 +41,19 @@ export function resolveCat(prop, catMap = new Map()) {
 
 // ── Fetch all active categories → Map<pageId, name> ──────────────
 export async function buildCatMap() {
-  if (!CATEGORIES_DB()) return new Map()
   try {
-    const res = await notion.databases.query({
-      database_id: CATEGORIES_DB(),
-      filter: { property: 'Active', checkbox: { equals: true } },
-      page_size: 100,
-    })
+    // Use env var if set, otherwise auto-discover from the Category relation on the transactions DB
+    let dbId = CATEGORIES_DB()
+    if (!dbId) {
+      const db = await notion.databases.retrieve({ database_id: DB_ID() })
+      dbId = db.properties.Category?.relation?.database_id
+    }
+    if (!dbId) return new Map()
+
+    const res = await notion.databases.query({ database_id: dbId, page_size: 100 })
     return new Map(res.results.map(pg => [
       pg.id,
-      pg.properties.Name?.title[0]?.plain_text ?? '',
+      Object.values(pg.properties).find(v => v.type === 'title')?.title?.[0]?.plain_text ?? '',
     ]))
   } catch {
     return new Map()

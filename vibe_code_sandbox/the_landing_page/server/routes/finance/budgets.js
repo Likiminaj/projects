@@ -5,6 +5,8 @@ import { resolveCat, buildCatMap } from './transactions.js'
 const router = Router()
 const BUDGETS_DB      = () => process.env.NOTION_BUDGETS_DB
 const TRANSACTIONS_DB = () => process.env.NOTION_TRANSACTIONS_DB
+const PLANS_DB        = () => process.env.NOTION_REDUCTION_PLANS_DB
+const LINES_DB        = () => process.env.NOTION_REDUCTION_LINES_DB
 
 function mapBudget(page, catMap = new Map()) {
   const p = page.properties
@@ -34,6 +36,35 @@ async function queryAll(dbId, filter) {
   return results
 }
 
+// Returns { categoryLower → reducedLimit } for any active plan covering `month`
+async function getReductionOverrides(month) {
+  if (!PLANS_DB() || !LINES_DB()) return {}
+  try {
+    const monthStart = `${month}-01`
+    const plans = await queryAll(PLANS_DB(), {
+      and: [
+        { property: 'Status',      select: { equals: 'Active'           } },
+        { property: 'Start Month', date:   { on_or_before: monthStart   } },
+        { property: 'End Month',   date:   { on_or_after:  monthStart   } },
+      ],
+    })
+    if (!plans.length) return {}
+    const overrides = {}
+    for (const plan of plans) {
+      const lines = await queryAll(LINES_DB(), {
+        property: 'Plan', relation: { contains: plan.id },
+      })
+      for (const line of lines) {
+        const p   = line.properties
+        const cat = p.Category?.select?.name?.toLowerCase()
+        const lim = p['Reduced Limit']?.number ?? 0
+        if (cat) overrides[cat] = lim
+      }
+    }
+    return overrides
+  } catch { return {} }
+}
+
 async function getBudgetRows(catMap) {
   // Try rows explicitly marked as 'default'
   try {
@@ -53,6 +84,39 @@ async function getBudgetRows(catMap) {
   return all.map(pg => mapBudget(pg, catMap))
 }
 
+// GET /api/finance/budgets/debug?month=YYYY-MM  — raw diagnostic data
+router.get('/budgets/debug', async (req, res) => {
+  try {
+    const { month = new Date().toISOString().slice(0, 7) } = req.query
+    const [year, mon] = month.split('-').map(Number)
+    const startDate = `${month}-01`
+    const endDate   = `${month}-${String(new Date(year, mon, 0).getDate()).padStart(2, '0')}`
+
+    const catMap = await buildCatMap()
+    const budgetPages = await queryAll(BUDGETS_DB(), { property: 'Active', checkbox: { equals: true } })
+
+    // Fetch a few transactions regardless of date to inspect property structure
+    const anyTxRes = await notion.databases.query({ database_id: TRANSACTIONS_DB(), page_size: 3 })
+
+    res.json({
+      catMapSize: catMap.size,
+      budgetCategories: budgetPages.map(pg => ({
+        resolved: resolveCat(pg.properties.Category, catMap)
+            ?? Object.values(pg.properties).find(v => v.type === 'title')?.title?.[0]?.plain_text,
+      })),
+      transactionPropertyKeys: anyTxRes.results[0] ? Object.entries(anyTxRes.results[0].properties).map(([k, v]) => ({ key: k, type: v.type })) : [],
+      transactionSample: anyTxRes.results.slice(0, 3).map(pg => {
+        const p = pg.properties
+        return {
+          allProps: Object.fromEntries(Object.entries(p).map(([k, v]) => [k, { type: v.type, value: v[v.type] }])),
+        }
+      }),
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack })
+  }
+})
+
 // GET /api/finance/budgets/summary?month=YYYY-MM
 router.get('/budgets/summary', async (req, res) => {
   try {
@@ -64,10 +128,9 @@ router.get('/budgets/summary', async (req, res) => {
     const lastDay     = new Date(year, mon, 0).getDate()
     const endDate     = `${month}-${String(lastDay).padStart(2, '0')}`
 
-    // Build category map once — used by both mapBudget and transaction resolution
     const catMap = await buildCatMap()
 
-    const [budgets, txPages] = await Promise.all([
+    const [budgets, txPages, reductionOverrides] = await Promise.all([
       getBudgetRows(catMap),
       queryAll(TRANSACTIONS_DB(), {
         and: [
@@ -75,24 +138,31 @@ router.get('/budgets/summary', async (req, res) => {
           { property: 'Date', date: { on_or_before: endDate   } },
         ],
       }),
+      getReductionOverrides(month),
     ])
 
-    // Only expense transactions, not bucket spends
     const txns = txPages
       .map(page => {
         const p = page.properties
+        const category = resolveCat(p.Category, catMap)
+                      ?? Object.values(p).find(v => v.type === 'title')?.title?.[0]?.plain_text
+                      ?? null
         return {
-          category:      resolveCat(p.Category, catMap),
-          amount:        p.Amount?.number           ?? 0,
-          direction:     p.Direction?.select?.name  ?? null,
+          category,
+          amount:        p.Amount?.number              ?? 0,
+          direction:     p.Direction?.select?.name     ?? null,
           isBucketSpend: p['Is Bucket Spend']?.checkbox ?? false,
         }
       })
       .filter(tx => tx.direction !== 'Income' && !tx.isBucketSpend)
 
     const summary = budgets.map(budget => {
-      const spent       = txns.filter(tx => tx.category === budget.category).reduce((s, tx) => s + tx.amount, 0)
-      const limit       = budget.monthlyLimit
+      const budgetCat = budget.category.toLowerCase()
+      const spent     = txns
+        .filter(tx => tx.category != null && tx.category.toLowerCase() === budgetCat)
+        .reduce((s, tx) => s + tx.amount, 0)
+      // Use reduced limit if a spend reduction plan is active for this category
+      const limit = reductionOverrides[budgetCat] ?? budget.monthlyLimit
       const remaining   = limit - spent
       const percentUsed = limit > 0 ? (spent / limit) * 100 : 0
 

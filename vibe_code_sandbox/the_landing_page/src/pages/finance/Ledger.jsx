@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import AddTransactionModal from './AddTransactionModal.jsx'
+import BucketsSection from './BucketsSection.jsx'
+import BigSpendModal from './BigSpendModal.jsx'
 
 const PILL_COLORS = {
   gray:    { bg: '#F0EBE3', text: '#78716C' },
@@ -101,6 +103,20 @@ export default function Ledger() {
   const [savingBudgets, setSavingBudgets]   = useState(false)
   const [dismissedAlerts, setDismissedAlerts] = useState(() => new Set())
 
+  // Buckets state
+  const [buckets, setBuckets]           = useState([])
+  const [bucketsLoading, setBucketsLoading] = useState(false)
+  const [bigSpend, setBigSpend]         = useState(null) // { bucketId, bucketName, shortfall }
+
+  async function fetchBuckets(showCompleted = false) {
+    setBucketsLoading(true)
+    try {
+      const res  = await fetch(`/api/finance/buckets${showCompleted ? '?showCompleted=true' : ''}`)
+      const json = await res.json()
+      if (json.success) setBuckets(json.data)
+    } finally { setBucketsLoading(false) }
+  }
+
   // Options state — seeded from cache so the modal opens instantly
   const [options, setOptions] = useState(
     () => readCache() ?? { categories: [], sources: [] }
@@ -183,6 +199,27 @@ export default function Ledger() {
   useEffect(() => { fetchTransactions(month) }, [month])
   useEffect(() => { revalidateOptions() }, [])
   useEffect(() => { fetchBudgetSummary(month) }, [month])
+  useEffect(() => { fetchBuckets() }, [])
+
+  async function handleTransactionSaved(tx, bucketId) {
+    setAllTransactions(prev => [tx, ...prev])
+    fetchBudgetSummary(month)
+    if (bucketId) {
+      try {
+        const res  = await fetch(`/api/finance/buckets/${bucketId}/spend`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: tx.amount }),
+        })
+        const json = await res.json()
+        if (json.success) {
+          fetchBuckets()
+          if (json.data.shortfall > 0) {
+            setBigSpend({ bucketId, bucketName: json.data.bucket.name, shortfall: json.data.shortfall })
+          }
+        }
+      } catch {}
+    }
+  }
 
   async function handleDelete(id) {
     setDeletingId(id)
@@ -256,16 +293,16 @@ export default function Ledger() {
 
       {/* ── Alert banners ── */}
       {visibleAlerts.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
           {visibleAlerts.map(alert => (
             <div key={alert.key} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-              padding: '10px 14px',
+              padding: '16px',
               background: alert.type === 'over' ? 'var(--coral-light)' : 'var(--amber-light)',
               border: `1.5px solid ${alert.type === 'over' ? 'var(--coral)' : 'var(--amber)'}`,
               borderRadius: 'var(--radius-md)',
             }}>
-              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: alert.type === 'over' ? '#9a2a1a' : '#7a5000' }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: alert.type === 'over' ? '#9a2a1a' : '#7a5000' }}>
                 {alert.type === 'over' ? '✕' : '⚠'} {alert.msg}
               </span>
               <button
@@ -284,9 +321,9 @@ export default function Ledger() {
           style={{
             display: 'block', width: '100%', textAlign: 'left',
             background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)', padding: '12px 16px',
+            borderRadius: 'var(--radius-lg)', padding: '16px 20px',
             cursor: budgetsLoading ? 'default' : 'pointer',
-            marginBottom: 16,
+            marginBottom: 24,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: totalBudget > 0 ? 8 : 0 }}>
@@ -299,7 +336,7 @@ export default function Ledger() {
             <span style={{ fontSize: 16, color: 'var(--text-tertiary)' }}>›</span>
           </div>
           {totalBudget > 0 && (
-            <div style={{ background: 'var(--bg-sunken)', borderRadius: 999, height: 6, overflow: 'hidden' }}>
+            <div style={{ background: 'var(--bg-sunken)', borderRadius: 999, height: 8, overflow: 'hidden' }}>
               <div style={{
                 height: '100%', borderRadius: 999, transition: 'width 300ms ease',
                 width: `${Math.min(totalPercent, 100)}%`,
@@ -326,11 +363,12 @@ export default function Ledger() {
                 <div
                   key={b.id}
                   style={{
-                    padding: '12px 20px',
-                    borderBottom: i < budgetSummary.length - 1 ? '1px solid var(--border)' : 'none',
+                    padding: '14px 20px',
+                    minHeight: 44,
+                    borderBottom: i < budgetSummary.length - 1 ? '1px solid #D0C8BE' : 'none',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: budgetsEdit ? 0 : 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: budgetsEdit ? 0 : 12 }}>
                     <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)', minWidth: 0 }}>
                       {b.category}
                     </span>
@@ -365,7 +403,7 @@ export default function Ledger() {
                     )}
                   </div>
                   {!budgetsEdit && (
-                    <div style={{ background: 'var(--bg-sunken)', borderRadius: 999, height: 5, overflow: 'hidden' }}>
+                    <div style={{ background: 'var(--bg-sunken)', borderRadius: 999, height: 8, overflow: 'hidden' }}>
                       <div style={{
                         height: '100%', borderRadius: 999, transition: 'width 300ms ease',
                         width: `${Math.min(b.percentUsed, 100)}%`,
@@ -395,6 +433,14 @@ export default function Ledger() {
           </div>
         </div>
       )}
+
+      {/* ── Buckets section ── */}
+      <BucketsSection
+        buckets={buckets}
+        loading={bucketsLoading}
+        onRefresh={fetchBuckets}
+        categories={categories}
+      />
 
       {/* ── Month nav + filters ── */}
       <div className="ds-row" style={{ gap: 12, flexWrap: 'wrap', marginBottom: 16, justifyContent: 'space-between' }}>
@@ -453,10 +499,10 @@ export default function Ledger() {
           <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>No transactions found.</p>
         </div>
       ) : (
-        <div className="ds-col ds-gap-3">
+        <div className="ds-col" style={{ gap: 24 }}>
           {grouped.map(([dateKey, txns]) => (
             <div key={dateKey} className="ds-card">
-              <div style={{ padding: '12px 16px 10px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
                 <span className="ds-label">{formatDateHeading(dateKey)}</span>
               </div>
               {txns.map((t, i) => (
@@ -466,7 +512,8 @@ export default function Ledger() {
                   onMouseLeave={() => setHoveredId(null)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                    borderBottom: i < txns.length - 1 ? '1px solid var(--border)' : 'none',
+                    minHeight: 48,
+                    borderBottom: i < txns.length - 1 ? '1px solid #D0C8BE' : 'none',
                     opacity: t.isBucketSpend ? 0.55 : 1,
                   }}
                 >
@@ -479,7 +526,7 @@ export default function Ledger() {
                       {t.title || '—'}
                     </span>
                     {t.merchant && (
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{t.merchant}</span>
+                      <span style={{ fontSize: 15, color: 'var(--text-tertiary)' }}>{t.merchant}</span>
                     )}
                   </div>
                   <CategoryPill
@@ -522,10 +569,24 @@ export default function Ledger() {
         <AddTransactionModal
           categories={categories}
           sources={sources}
+          buckets={buckets}
           onSourceAdded={opt  => patchOptions('sources', prev => [...prev, opt])}
           onSourceDeleted={name => patchOptions('sources', prev => prev.filter(o => o.name !== name))}
           onClose={() => setShowModal(false)}
-          onSaved={tx => { setAllTransactions(prev => [tx, ...prev]); fetchBudgetSummary(month) }}
+          onSaved={handleTransactionSaved}
+          onBulkSaved={() => { fetchTransactions(month); fetchBudgetSummary(month) }}
+        />
+      )}
+
+      {/* ── Big spend shortfall modal ── */}
+      {bigSpend && (
+        <BigSpendModal
+          shortfall={bigSpend.shortfall}
+          bucketId={bigSpend.bucketId}
+          bucketName={bigSpend.bucketName}
+          budgetCategories={budgetSummary.map(b => b.category)}
+          onDone={() => { setBigSpend(null); fetchBuckets(); fetchBudgetSummary(month) }}
+          onClose={() => setBigSpend(null)}
         />
       )}
 
