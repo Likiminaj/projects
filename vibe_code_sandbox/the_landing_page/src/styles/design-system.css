@@ -56,12 +56,12 @@
 
   /* Typography */
   --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
-  --text-xs:   14px;
-  --text-sm:   17px;
-  --text-base: 20px;
-  --text-lg:   23px;
-  --text-xl:   29px;
-  --text-2xl:  36px;
+  --text-xs:   9px;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-lg:   14px;
+  --text-xl:   19px;
+  --text-2xl:  23px;
 
   /* Transition */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -83,7 +83,7 @@ body {
 
 /* ── Layout ──────────────────────────────────────────────────── */
 .ds-page {
-  max-width: 700px;
+  max-width: 864px;
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
@@ -428,7 +428,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 21px;
+  font-size: 15px;
   color: var(--text-secondary);
   transition: background var(--duration) var(--ease);
   flex-shrink: 0;
@@ -461,3 +461,25 @@ body {
 .ds-gap-4      { gap: var(--space-4); }
 .ds-flex-1     { flex: 1; min-width: 0; }
 .ds-text-right { text-align: right; }
+
+/* ── Clickable / tappable card ────────────────────────────────── */
+.ds-card--clickable {
+  cursor: pointer;
+  transition: box-shadow var(--duration) var(--ease), transform var(--duration) var(--ease);
+}
+.ds-card--clickable:hover  { box-shadow: var(--shadow-md); }
+.ds-card--clickable:active { transform: scale(0.99); }
+
+/* ── Additional button variants ───────────────────────────────── */
+.ds-btn--green {
+  background: var(--green-light);
+  color: #1e5c1b;
+  border: 1.5px solid var(--green);
+  padding: 11px 20px;
+}
+
+.ds-btn--danger {
+  background: var(--coral);
+  color: #fff;
+  padding: 6px 14px;
+}

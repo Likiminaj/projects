@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"nodemon server/index.js\"",
     "server": "nodemon server/index.js",
-    "setup-notion": "node scripts/setup-notion.js"
+    "setup-notion": "node scripts/setup-notion.js",
+    "setup-accounts": "node scripts/setup-accounts-db.js",
+    "setup-reduction-dbs": "node scripts/setup-reduction-dbs.js",
+    "migrate-recurring": "node scripts/migrate-recurring-schema.js",
+    "migrate-accounts": "node scripts/migrate-accounts-schema.js"
   },
   "dependencies": {
     "@notionhq/client": "^2.2.15",

@@ -33,7 +33,14 @@ export default function FinanceLayout() {
         top: 0,
         zIndex: 10,
       }}>
-        <div style={{ maxWidth: 680, margin: '0 auto', display: 'flex', gap: 4, paddingBottom: 12 }}>
+        <div style={{ maxWidth: 864, margin: '0 auto', display: 'flex', gap: 4, paddingBottom: 12, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <NavLink
+            to="/finance"
+            end
+            style={({ isActive }) => ({ ...TAB_STYLE, ...(isActive ? ACTIVE_STYLE : {}) })}
+          >
+            Overview
+          </NavLink>
           <NavLink
             to="/finance/ledger"
             style={({ isActive }) => ({ ...TAB_STYLE, ...(isActive ? ACTIVE_STYLE : {}) })}
@@ -47,10 +54,22 @@ export default function FinanceLayout() {
             Recurring
           </NavLink>
           <NavLink
+            to="/finance/birthdays"
+            style={({ isActive }) => ({ ...TAB_STYLE, ...(isActive ? ACTIVE_STYLE : {}) })}
+          >
+            Birthdays
+          </NavLink>
+          <NavLink
             to="/finance/cpf"
             style={({ isActive }) => ({ ...TAB_STYLE, ...(isActive ? ACTIVE_STYLE : {}) })}
           >
             CPF
+          </NavLink>
+          <NavLink
+            to="/finance/payback"
+            style={({ isActive }) => ({ ...TAB_STYLE, ...(isActive ? ACTIVE_STYLE : {}) })}
+          >
+            Payback
           </NavLink>
         </div>
       </div>

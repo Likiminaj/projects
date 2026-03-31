@@ -1,5 +1,32 @@
 import { useState } from 'react'
 
+function CircularRing({ percent, size = 44, stroke = 5, color = 'var(--green)', label }) {
+  const pct = Math.min(Math.max(percent, 0), 100)
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+  const offset = circ - (pct / 100) * circ
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ display: 'block', transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg-sunken)" strokeWidth={stroke} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={circ} strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 500ms ease' }}
+        />
+      </svg>
+      {label !== undefined && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: size < 48 ? 9 : 11, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em',
+        }}>
+          {label}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const TYPE_COLORS = {
   Permanent: { bg: '#DDF0F8', text: '#1A5C8A' },
   Temporary:  { bg: '#FDF0D0', text: '#8A5F00' },
@@ -18,19 +45,6 @@ function TypeBadge({ type }) {
   )
 }
 
-function ProgressBar({ percent, status }) {
-  const color = status === 'Funded' || status === 'Completed' ? 'var(--green)'
-              : percent >= 80 ? 'var(--amber)'
-              : 'var(--sky)'
-  return (
-    <div style={{ background: 'var(--bg-sunken)', borderRadius: 999, height: 8, overflow: 'hidden', flex: 1, minWidth: 80 }}>
-      <div style={{
-        height: '100%', borderRadius: 999, transition: 'width 400ms var(--ease)',
-        width: `${Math.min(percent, 100)}%`, background: color,
-      }} />
-    </div>
-  )
-}
 
 function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
   const [expanded, setExpanded]       = useState(false)
@@ -84,8 +98,15 @@ function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
           transition: 'background 150ms var(--ease)',
         }}
       >
+        <CircularRing
+          percent={bucket.percentFunded}
+          size={44}
+          stroke={5}
+          color={bucket.status === 'Funded' || bucket.status === 'Completed' ? 'var(--green)' : bucket.percentFunded >= 80 ? 'var(--amber)' : 'var(--sky)'}
+          label={`${Math.round(bucket.percentFunded)}%`}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
             <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
               {bucket.name}
             </span>
@@ -94,26 +115,25 @@ function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--coral)', fontWeight: 600 }}>Behind</span>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ProgressBar percent={bucket.percentFunded} status={bucket.status} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>
               ${bucket.currentAmount.toFixed(0)} / ${bucket.targetAmount.toFixed(0)}
             </span>
             {months != null && (
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
-                {months}mo left
+                · {months}mo left
               </span>
             )}
           </div>
         </div>
-        <span style={{ fontSize: 14, color: 'var(--text-tertiary)', flexShrink: 0 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', flexShrink: 0 }}>
           {expanded ? '▲' : '▼'}
         </span>
       </div>
 
       {/* Expanded detail */}
       {expanded && (
-        <div style={{ padding: '0 20px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ padding: '12px 20px 18px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* Allocate */}
           {!isRepayment && (
@@ -168,7 +188,8 @@ function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Dissolve "{bucket.name}"?</span>
-              <button className="ds-btn ds-btn--sm" style={{ background: 'var(--coral)', color: '#fff', border: 'none', borderRadius: 999, padding: '6px 14px', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 'var(--text-xs)' }}
+              <button
+                className="ds-btn ds-btn--danger ds-btn--sm"
                 onClick={e => { e.stopPropagation(); submitDissolve() }}
                 disabled={dissolving}
               >{dissolving ? '…' : 'Confirm'}</button>
@@ -255,14 +276,14 @@ export default function BucketsSection({ buckets, loading, onRefresh, categories
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', flex: 1, minWidth: 120 }}>
               <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>$</span>
-              <input className="ds-input" type="number" min="0" step="1" placeholder="Target amount" required
+              <input className="ds-input" type="number" min="0" step="0.01" placeholder="Target amount" required
                 style={{ paddingLeft: 26, width: '100%' }}
                 value={form.targetAmount} onChange={e => setForm(f => ({ ...f, targetAmount: e.target.value }))}
               />
             </div>
             <div style={{ position: 'relative', flex: 1, minWidth: 120 }}>
               <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>$</span>
-              <input className="ds-input" type="number" min="0" step="1" placeholder="Monthly top-up"
+              <input className="ds-input" type="number" min="0" step="0.01" placeholder="Monthly top-up"
                 style={{ paddingLeft: 26, width: '100%' }}
                 value={form.monthlyTopUp} onChange={e => setForm(f => ({ ...f, monthlyTopUp: e.target.value }))}
               />

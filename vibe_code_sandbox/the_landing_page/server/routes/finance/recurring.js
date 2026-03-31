@@ -22,32 +22,59 @@ async function getTxSchema() {
   return _txSchema
 }
 
+function currentMonthKey() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
 function mapRecurring(page) {
   const p = page.properties
   return {
-    id:             page.id,
-    name:           p.Name?.title[0]?.plain_text ?? '',
-    amount:         p.Amount?.number ?? null,
-    frequency:      p.Frequency?.select?.name ?? null,
-    direction:      p.Direction?.select?.name ?? null,
-    merchant:       p.Merchant?.rich_text[0]?.plain_text ?? '',
-    category:       p.Category?.select?.name ?? null,
-    source:         p.Source?.select?.name ?? null,
+    id:              page.id,
+    name:            p.Name?.title[0]?.plain_text ?? '',
+    amount:          p.Amount?.number ?? null,
+    frequency:       p.Frequency?.select?.name ?? null,
+    yearlyMonth:     p.Month?.number ?? null,
+    direction:       p.Direction?.select?.name ?? null,
+    merchant:        p.Merchant?.rich_text[0]?.plain_text ?? '',
+    category:        p.Category?.select?.name ?? null,
+    source:          p.Source?.select?.name ?? null,
     isPendingMatcha: p['Is Pending Matcha']?.checkbox ?? false,
-    day:            p.Day?.number ?? null,
-    notes:          p.Notes?.rich_text[0]?.plain_text ?? '',
-    active:         p.Active?.checkbox ?? true,
+    day:             p.Day?.number ?? null,
+    notes:           p.Notes?.rich_text[0]?.plain_text ?? '',
+    active:          p.Active?.checkbox ?? true,
+    activeFrom:      p['Active From']?.rich_text[0]?.plain_text ?? null,
+    activeUntil:     p['Active Until']?.rich_text[0]?.plain_text ?? null,
   }
 }
 
-// GET /api/finance/recurring — returns all recurring items
+// GET /api/finance/recurring — returns active recurring items, auto-archives expired ones
 router.get('/recurring', async (req, res) => {
   try {
     const response = await notion.databases.query({
       database_id: RECURRING_DB(),
       sorts: [{ property: 'Name', direction: 'ascending' }],
     })
-    res.json({ success: true, data: response.results.map(mapRecurring) })
+
+    const now  = currentMonthKey()
+    const all  = response.results.map(mapRecurring)
+
+    // Auto-archive items whose activeUntil has passed
+    const expired = all.filter(item => item.activeUntil && item.activeUntil < now)
+    if (expired.length > 0) {
+      await Promise.all(expired.map(item =>
+        notion.pages.update({ page_id: item.id, archived: true })
+      ))
+    }
+
+    // Return only items active in the current month
+    const active = all.filter(item => {
+      if (item.activeUntil && item.activeUntil < now)  return false  // expired (being archived above)
+      if (item.activeFrom  && item.activeFrom  > now)  return false  // not started yet
+      return true
+    })
+
+    res.json({ success: true, data: active })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -56,7 +83,7 @@ router.get('/recurring', async (req, res) => {
 // POST /api/finance/recurring
 router.post('/recurring', async (req, res) => {
   try {
-    const { name, amount, frequency, direction = 'Expense', merchant, category, source, isPendingMatcha, day, notes } = req.body
+    const { name, amount, frequency, yearlyMonth, direction = 'Expense', merchant, category, source, isPendingMatcha, day, notes, activeFrom, activeUntil } = req.body
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name is required' })
 
     const schema = await getRecurringSchema()
@@ -71,8 +98,11 @@ router.post('/recurring', async (req, res) => {
       ...(schema.has('Merchant')          && merchant                   ? { Merchant:            { rich_text: [{ text: { content: merchant } }] } } : {}),
       ...(schema.has('Category')          && category                   ? { Category:            { select: { name: category } } }    : {}),
       ...(schema.has('Source')            && source                     ? { Source:              { select: { name: source } } }      : {}),
-      ...(schema.has('Is Pending Matcha')                                    ? { 'Is Pending Matcha': { checkbox: isPendingMatcha ?? false } }             : {}),
-      ...(schema.has('Day')               && day != null && day !== ''      ? { Day:                 { number: parseInt(day, 10) } }                        : {}),
+      ...(schema.has('Is Pending Matcha')                                         ? { 'Is Pending Matcha': { checkbox: isPendingMatcha ?? false } }          : {}),
+      ...(schema.has('Day')          && day != null && day !== ''                  ? { Day:           { number: parseInt(day, 10) } }                                                  : {}),
+      ...(schema.has('Month')        && yearlyMonth != null && yearlyMonth !== '' ? { Month:         { number: parseInt(yearlyMonth, 10) } }                                            : {}),
+      ...(schema.has('Active From')  && activeFrom                                ? { 'Active From':  { rich_text: [{ text: { content: activeFrom } }] } }                              : {}),
+      ...(schema.has('Active Until') && activeUntil                               ? { 'Active Until': { rich_text: [{ text: { content: activeUntil } }] } }                             : {}),
     }
 
     const page = await notion.pages.create({ parent: { database_id: RECURRING_DB() }, properties })

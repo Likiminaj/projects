@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import AddTransactionModal from './AddTransactionModal.jsx'
 import BucketsSection from './BucketsSection.jsx'
 import BigSpendModal from './BigSpendModal.jsx'
+import RecordCardPaymentModal from './RecordCardPaymentModal.jsx'
 
 const PILL_COLORS = {
   gray:    { bg: '#F0EBE3', text: '#78716C' },
@@ -29,6 +30,10 @@ function shiftMonth(monthKey, delta) {
   const [year, mon] = monthKey.split('-').map(Number)
   const d = new Date(year, mon - 1 + delta, 1)
   return toMonthKey(d)
+}
+
+function fmtMoney(n) {
+  return `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 function groupByDate(transactions) {
@@ -62,7 +67,7 @@ function CategoryPill({ category, color }) {
     <span style={{
       background: c.bg, color: c.text,
       borderRadius: 999, padding: '2px 9px',
-      fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+      fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
     }}>
       {category}
     </span>
@@ -71,12 +76,50 @@ function CategoryPill({ category, color }) {
 
 const OPTS_CACHE_KEY = 'life-os:options'
 
+function CircularRing({ percent, size = 44, stroke = 5, color = 'var(--green)', label }) {
+  const pct = Math.min(Math.max(percent, 0), 100)
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+  const offset = circ - (pct / 100) * circ
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ display: 'block', transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg-sunken)" strokeWidth={stroke} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={circ} strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 500ms ease' }}
+        />
+      </svg>
+      {label !== undefined && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: size < 48 ? 9 : 11, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em',
+        }}>
+          {label}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function isLiabilityAccount(account) {
+  if (account.role) return account.role === 'liability'
+  const value = `${account.name ?? ''} ${account.type ?? ''}`.toLowerCase()
+  return /credit card|card|loan|debt|mortgage|liability/.test(value)
+}
+
+function isCashAccount(account) {
+  const value = `${account.name ?? ''} ${account.type ?? ''}`.toLowerCase()
+  return /checking|savings|cash/.test(value)
+}
+
 function readCache() {
   try {
     const raw = localStorage.getItem(OPTS_CACHE_KEY)
     if (!raw) return null
     const { data, ts } = JSON.parse(raw)
-    if (Date.now() - ts > 10 * 60 * 1000) return null
+    if (Date.now() - ts > 60 * 1000) return null   // 1-minute seed cache — revalidate always fires on open
     return data
   } catch { return null }
 }
@@ -94,8 +137,13 @@ export default function Ledger() {
   const [hoveredId, setHoveredId]       = useState(null)
   const [deletingId, setDeletingId]     = useState(null)
 
+  const [accounts, setAccounts]         = useState([])
+  const [accountsLoading, setAccountsLoading] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+
   // Budget state
   const [budgetSummary, setBudgetSummary]   = useState([])
+  const [budgetTotalExpenses, setBudgetTotalExpenses] = useState(null) // server-side tally
   const [budgetsLoading, setBudgetsLoading] = useState(false)
   const [showBudgetModal, setShowBudgetModal] = useState(false)
   const [budgetsEdit, setBudgetsEdit]       = useState(false)
@@ -142,6 +190,17 @@ export default function Ledger() {
     }
   }
 
+  async function fetchAccounts() {
+    setAccountsLoading(true)
+    try {
+      const res = await fetch('/api/finance/accounts')
+      const json = await res.json()
+      if (json.success) setAccounts(json.data)
+    } finally {
+      setAccountsLoading(false)
+    }
+  }
+
   async function revalidateOptions() {
     try {
       const res  = await fetch('/api/finance/categories')
@@ -155,7 +214,10 @@ export default function Ledger() {
     try {
       const res  = await fetch(`/api/finance/budgets/summary?month=${m}`)
       const json = await res.json()
-      if (json.success) setBudgetSummary(json.data)
+      if (json.success) {
+        setBudgetSummary(json.data)
+        if (json.totalExpenses != null) setBudgetTotalExpenses(json.totalExpenses)
+      }
     } finally {
       setBudgetsLoading(false)
     }
@@ -163,7 +225,10 @@ export default function Ledger() {
 
   function enterEditMode() {
     const limits = {}
-    for (const b of budgetSummary) limits[b.id] = String(b.monthlyLimit)
+    for (const b of budgetSummary) {
+      if (b.id === '__uncategorized__') continue
+      limits[b.id] = String(b.monthlyLimit)
+    }
     setEditLimits(limits)
     setBudgetsEdit(true)
   }
@@ -200,6 +265,7 @@ export default function Ledger() {
   useEffect(() => { revalidateOptions() }, [])
   useEffect(() => { fetchBudgetSummary(month) }, [month])
   useEffect(() => { fetchBuckets() }, [])
+  useEffect(() => { fetchAccounts() }, [])
 
   async function handleTransactionSaved(tx, bucketId) {
     setAllTransactions(prev => [tx, ...prev])
@@ -241,9 +307,22 @@ export default function Ledger() {
     setFilter('All')
   }
 
+  async function handlePaymentSaved() {
+    setShowPaymentModal(false)
+    await fetchAccounts()
+  }
+
   const income   = allTransactions.filter(t => t.direction === 'Income').reduce((s, t) => s + t.amount, 0)
   const expenses = allTransactions.filter(t => t.direction === 'Expense' && !t.isBucketSpend).reduce((s, t) => s + t.amount, 0)
   const net      = income - expenses
+
+  const assetAccounts = accounts.filter(a => !isLiabilityAccount(a))
+  const cashAccounts = assetAccounts.filter(isCashAccount)
+  const liabilityAccounts = accounts.filter(isLiabilityAccount)
+  const assetTotal = assetAccounts.reduce((s, a) => s + a.balance, 0)
+  const cashTotal = cashAccounts.reduce((s, a) => s + a.balance, 0)
+  const liabilityTotal = liabilityAccounts.reduce((s, a) => s + a.balance, 0)
+  const netWorth = assetTotal - liabilityTotal
 
   // ── Budget computed values ──────────────────────────────────────────────────
   const activeBudgets = budgetSummary.filter(b => b.monthlyLimit > 0)
@@ -285,134 +364,163 @@ export default function Ledger() {
   return (
     <div className="ds-page">
 
-      {/* ── Header ── */}
-      <div className="ds-row" style={{ justifyContent: 'space-between', marginBottom: 20 }}>
-        <h1 className="ds-heading" style={{ fontSize: 'var(--text-xl)' }}>Ledger</h1>
-        <button className="ds-btn ds-btn--primary" onClick={() => setShowModal(true)}>+ Add</button>
+      <div className="ds-row" style={{ justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
+        <h1 className="ds-heading" style={{ fontSize: 'var(--text-xl)', margin: 0 }}>Ledger</h1>
+        <div className="ds-row ds-gap-2">
+          <button
+            className="ds-btn ds-btn--outline ds-btn--sm"
+            onClick={() => setShowPaymentModal(true)}
+            disabled={accountsLoading || cashAccounts.length === 0 || liabilityAccounts.length === 0}
+          >
+            Record card payment
+          </button>
+          <button className="ds-btn ds-btn--primary" onClick={() => { revalidateOptions(); setShowModal(true) }}>+ Add</button>
+        </div>
       </div>
 
-      {/* ── Alert banners ── */}
-      {visibleAlerts.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-          {visibleAlerts.map(alert => (
-            <div key={alert.key} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-              padding: '16px',
-              background: alert.type === 'over' ? 'var(--coral-light)' : 'var(--amber-light)',
-              border: `1.5px solid ${alert.type === 'over' ? 'var(--coral)' : 'var(--amber)'}`,
-              borderRadius: 'var(--radius-md)',
-            }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: alert.type === 'over' ? '#9a2a1a' : '#7a5000' }}>
-                {alert.type === 'over' ? '✕' : '⚠'} {alert.msg}
-              </span>
-              <button
-                onClick={() => setDismissedAlerts(prev => new Set([...prev, alert.key]))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 17, color: 'var(--text-tertiary)', flexShrink: 0, padding: '2px 4px' }}
-              >✕</button>
-            </div>
-          ))}
+      {/* ── Month nav ── */}
+      <div className="ds-row" style={{ gap: 12, flexWrap: 'wrap', marginBottom: 16, justifyContent: 'space-between' }}>
+        <div className="ds-row ds-gap-2">
+          <button className="ds-btn ds-btn--icon" onClick={() => changeMonth(-1)}>‹</button>
+          <span style={{ fontWeight: 700, fontSize: 'var(--text-base)', minWidth: 120, textAlign: 'center' }}>
+            {formatMonthLabel(month)}
+          </span>
+          <button className="ds-btn ds-btn--icon" onClick={() => changeMonth(1)}>›</button>
         </div>
-      )}
+      </div>
 
-      {/* ── Budget card (clickable → opens breakdown modal) ── */}
-      {(budgetSummary.length > 0 || budgetsLoading) && (
-        <button
-          onClick={() => !budgetsLoading && setShowBudgetModal(true)}
-          style={{
-            display: 'block', width: '100%', textAlign: 'left',
-            background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)', padding: '16px 20px',
-            cursor: budgetsLoading ? 'default' : 'pointer',
-            marginBottom: 24,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: totalBudget > 0 ? 8 : 0 }}>
-            <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)', flex: 1 }}>Budget</span>
-            {totalBudget > 0 && (
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                ${totalSpent.toFixed(0)} of ${totalBudget.toFixed(0)}
-              </span>
-            )}
-            <span style={{ fontSize: 16, color: 'var(--text-tertiary)' }}>›</span>
-          </div>
-          {totalBudget > 0 && (
-            <div style={{ background: 'var(--bg-sunken)', borderRadius: 999, height: 8, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', borderRadius: 999, transition: 'width 300ms ease',
-                width: `${Math.min(totalPercent, 100)}%`,
-                background: totalStatus === 'over' ? 'var(--coral)' : totalStatus === 'warning' ? 'var(--amber)' : 'var(--green)',
-              }} />
-            </div>
-          )}
-        </button>
-      )}
+      <div style={{
+        background: net >= 0 ? 'var(--green-light)' : 'var(--coral-light)',
+        border: `1.5px solid ${net >= 0 ? 'var(--green)' : 'var(--coral)'}`,
+        borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)', marginBottom: 24,
+      }}>
+        <p className="ds-label" style={{ color: net >= 0 ? '#1e5c1b' : '#9a2a1a', marginBottom: 'var(--space-2)' }}>
+          Net · {formatMonthLabel(month)}
+        </p>
+        <p style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: net >= 0 ? '#1e5c1b' : '#9a2a1a', marginBottom: 'var(--space-3)' }}>
+          {net >= 0 ? '+' : ''}${net.toFixed(2)}
+        </p>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--green)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#1e5c1b', padding: '4px 12px' }}>
+            ↑ ${income.toFixed(2)}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--coral)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#9a2a1a', padding: '4px 12px' }}>
+            ↓ ${expenses.toFixed(2)}
+          </span>
+        </div>
+      </div>
 
-      {/* ── Budget breakdown modal ── */}
+      {/* ── Month overview modal ── */}
       {showBudgetModal && (
         <div className="ds-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) closeBudgetModal() }}>
           <div className="ds-modal">
             <div className="ds-modal__header">
               <h2 className="ds-heading" style={{ fontSize: 'var(--text-lg)' }}>
-                Budget · {formatMonthLabel(month)}
+                Month overview · {formatMonthLabel(month)}
               </h2>
               <button className="ds-modal__close" onClick={closeBudgetModal} aria-label="Close">✕</button>
             </div>
 
-            <div className="ds-modal__body" style={{ padding: 0 }}>
-              {budgetSummary.map((b, i) => (
-                <div
-                  key={b.id}
-                  style={{
-                    padding: '14px 20px',
-                    minHeight: 44,
-                    borderBottom: i < budgetSummary.length - 1 ? '1px solid #D0C8BE' : 'none',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: budgetsEdit ? 0 : 12 }}>
-                    <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)', minWidth: 0 }}>
-                      {b.category}
-                    </span>
-                    {budgetsEdit ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>$</span>
-                        <input
-                          type="number" min="0" step="1"
-                          value={editLimits[b.id] ?? ''}
-                          onChange={e => setEditLimits(prev => ({ ...prev, [b.id]: e.target.value }))}
-                          style={{
-                            width: 80, padding: '4px 8px',
-                            fontSize: 'var(--text-sm)', fontWeight: 600,
-                            background: 'var(--bg-sunken)', border: '1.5px solid var(--border)',
-                            borderRadius: 'var(--radius-sm)', outline: 'none',
-                            color: 'var(--text-primary)', fontFamily: 'var(--font-sans)',
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 500, flexShrink: 0 }}>
-                          ${b.spent.toFixed(0)} / ${b.monthlyLimit.toFixed(0)}
-                        </span>
-                        <span style={{
-                          fontSize: 17, flexShrink: 0,
-                          color: b.status === 'over' ? 'var(--coral)' : b.status === 'warning' ? 'var(--amber)' : b.status === 'zero' ? 'var(--text-tertiary)' : 'var(--green)',
-                        }}>
-                          {b.status === 'over' ? '✕' : b.status === 'warning' ? '⚠' : b.status === 'zero' ? '—' : '✓'}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  {!budgetsEdit && (
-                    <div style={{ background: 'var(--bg-sunken)', borderRadius: 999, height: 8, overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%', borderRadius: 999, transition: 'width 300ms ease',
-                        width: `${Math.min(b.percentUsed, 100)}%`,
-                        background: b.status === 'over' ? 'var(--coral)' : b.status === 'warning' ? 'var(--amber)' : b.status === 'zero' ? 'var(--border)' : 'var(--green)',
-                      }} />
-                    </div>
-                  )}
+            <div className="ds-modal__body" style={{ gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+                <div style={{ background: 'var(--green-light)', borderRadius: 'var(--radius-md)', padding: 14 }}>
+                  <p className="ds-label" style={{ color: '#1e5c1b', marginBottom: 6 }}>Income</p>
+                  <p style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800 }}>{income.toFixed(0)}</p>
                 </div>
-              ))}
+                <div style={{ background: 'var(--coral-light)', borderRadius: 'var(--radius-md)', padding: 14 }}>
+                  <p className="ds-label" style={{ color: '#9a2a1a', marginBottom: 6 }}>Spent</p>
+                  <p style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800 }}>{expenses.toFixed(0)}</p>
+                </div>
+                <div style={{ background: 'var(--lavender-light)', borderRadius: 'var(--radius-md)', padding: 14 }}>
+                  <p className="ds-label" style={{ color: '#5B3D7A', marginBottom: 6 }}>Net worth</p>
+                  <p style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800 }}>{netWorth.toFixed(0)}</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <span className="ds-badge ds-badge--green">Cash {fmtMoney(cashTotal)}</span>
+                <span className="ds-badge ds-badge--coral">Card debt {fmtMoney(liabilityTotal)}</span>
+                <span className="ds-badge ds-badge--neutral">{allTransactions.length} entries</span>
+              </div>
+
+              <div style={{ background: 'var(--bg-sunken)', borderRadius: 'var(--radius-md)', padding: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <span className="ds-label">Budgets</span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                    {totalBudget > 0 ? `${totalSpent.toFixed(0)} / ${totalBudget.toFixed(0)}` : 'No budget set'}
+                  </span>
+                </div>
+                {budgetSummary.map((b, i) => {
+                  const isUncategorized = b.id === '__uncategorized__'
+                  return (
+                    <div
+                      key={b.id}
+                      style={{
+                        padding: '12px 0',
+                        borderBottom: i < budgetSummary.length - 1 ? '1px solid rgba(28,25,23,0.08)' : 'none',
+                        ...(isUncategorized ? {
+                          background: 'var(--amber-light)',
+                          margin: '8px -16px -4px',
+                          padding: '10px 16px',
+                          borderRadius: '0 0 var(--radius-md) var(--radius-md)',
+                        } : {}),
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: (budgetsEdit || isUncategorized) ? 0 : 8 }}>
+                        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: isUncategorized ? '#7a5000' : 'var(--text-primary)' }}>
+                          {b.category}
+                          {isUncategorized && <span style={{ fontWeight: 400, fontSize: 'var(--text-xs)', marginLeft: 6 }}>— no budget row matched</span>}
+                        </span>
+                        {!isUncategorized && budgetsEdit ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>$</span>
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={editLimits[b.id] ?? ''}
+                              onChange={e => setEditLimits(prev => ({ ...prev, [b.id]: e.target.value }))}
+                              style={{
+                                width: 80, padding: '4px 8px',
+                                fontSize: 'var(--text-sm)', fontWeight: 600,
+                                background: 'var(--bg-sunken)', border: '1.5px solid var(--border)',
+                                borderRadius: 'var(--radius-sm)', outline: 'none',
+                                color: 'var(--text-primary)', fontFamily: 'var(--font-sans)',
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 'var(--text-xs)', color: isUncategorized ? '#7a5000' : 'var(--text-secondary)', fontWeight: 600 }}>
+                            ${b.spent.toFixed(0)}{!isUncategorized && ` / $${b.monthlyLimit.toFixed(0)}`}
+                          </span>
+                        )}
+                      </div>
+                      {!budgetsEdit && !isUncategorized && (
+                        <div style={{ background: 'var(--bg-surface)', borderRadius: 999, height: 8, overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%', borderRadius: 999, transition: 'width 300ms ease',
+                            width: `${Math.min(b.percentUsed, 100)}%`,
+                            background: b.status === 'over' ? 'var(--coral)' : b.status === 'warning' ? 'var(--amber)' : b.status === 'zero' ? 'var(--border)' : 'var(--green)',
+                          }} />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Reconciliation strip */}
+              {budgetTotalExpenses != null && !budgetsEdit && (
+                <div style={{
+                  marginTop: 12, padding: '10px 14px',
+                  background: Math.abs(budgetTotalExpenses - expenses) < 0.5 ? 'var(--green-light)' : 'var(--amber-light)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 'var(--text-xs)', fontWeight: 600,
+                  color: Math.abs(budgetTotalExpenses - expenses) < 0.5 ? '#1e5c1b' : '#7a5000',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <span>Ledger expenses</span>
+                  <span>${expenses.toFixed(2)}</span>
+                </div>
+              )}
             </div>
 
             <div className="ds-modal__footer">
@@ -442,15 +550,43 @@ export default function Ledger() {
         categories={categories}
       />
 
-      {/* ── Month nav + filters ── */}
-      <div className="ds-row" style={{ gap: 12, flexWrap: 'wrap', marginBottom: 16, justifyContent: 'space-between' }}>
-        <div className="ds-row ds-gap-2">
-          <button className="ds-btn ds-btn--icon" onClick={() => changeMonth(-1)}>‹</button>
-          <span style={{ fontWeight: 700, fontSize: 'var(--text-base)', minWidth: 120, textAlign: 'center' }}>
-            {formatMonthLabel(month)}
-          </span>
-          <button className="ds-btn ds-btn--icon" onClick={() => changeMonth(1)}>›</button>
+      {/* ── Budget card ── */}
+      {(budgetSummary.length > 0 || budgetsLoading) && (
+        <div
+          className={`ds-card ds-card--padded${budgetsLoading ? '' : ' ds-card--clickable'}`}
+          onClick={() => !budgetsLoading && setShowBudgetModal(true)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && !budgetsLoading && setShowBudgetModal(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)', flex: 1 }}>
+                Budget · {formatMonthLabel(month)}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>›</span>
+            </div>
+            {totalBudget > 0 && (
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                ${totalSpent.toFixed(0)} spent · ${Math.max(totalBudget - totalSpent, 0).toFixed(0)} left
+              </span>
+            )}
+          </div>
+          {totalBudget > 0 && (
+            <CircularRing
+              percent={totalPercent}
+              size={64}
+              stroke={6}
+              color={totalStatus === 'over' ? 'var(--coral)' : totalStatus === 'warning' ? 'var(--amber)' : 'var(--green)'}
+              label={`${Math.round(totalPercent)}%`}
+            />
+          )}
         </div>
+      )}
+
+      {/* ── Filters ── */}
+      <div className="ds-row" style={{ gap: 12, flexWrap: 'wrap', marginBottom: 16, justifyContent: 'space-between' }}>
         <div className="ds-row ds-gap-2" style={{ flexWrap: 'wrap' }}>
           {[
             { label: 'All',          active: 'ds-chip--active'      },
@@ -466,28 +602,6 @@ export default function Ledger() {
               {label}
             </button>
           ))}
-        </div>
-      </div>
-
-      {/* ── Hero summary ── */}
-      <div style={{
-        background: net >= 0 ? 'var(--green-light)' : 'var(--coral-light)',
-        border: `1.5px solid ${net >= 0 ? 'var(--green)' : 'var(--coral)'}`,
-        borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)', marginBottom: 24,
-      }}>
-        <p className="ds-label" style={{ color: net >= 0 ? '#1e5c1b' : '#9a2a1a', marginBottom: 'var(--space-2)' }}>
-          Net · {formatMonthLabel(month)}
-        </p>
-        <p style={{ fontSize: 55, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: net >= 0 ? '#1e5c1b' : '#9a2a1a', marginBottom: 'var(--space-3)' }}>
-          {net >= 0 ? '+' : ''}${net.toFixed(2)}
-        </p>
-        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--green)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#1e5c1b', padding: '4px 12px' }}>
-            ↑ ${income.toFixed(2)}
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--coral)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#9a2a1a', padding: '4px 12px' }}>
-            ↓ ${expenses.toFixed(2)}
-          </span>
         </div>
       </div>
 
@@ -526,7 +640,7 @@ export default function Ledger() {
                       {t.title || '—'}
                     </span>
                     {t.merchant && (
-                      <span style={{ fontSize: 15, color: 'var(--text-tertiary)' }}>{t.merchant}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{t.merchant}</span>
                     )}
                   </div>
                   <CategoryPill
@@ -548,7 +662,7 @@ export default function Ledger() {
                       flexShrink: 0, background: 'none', border: 'none',
                       cursor: deletingId === t.id ? 'wait' : 'pointer',
                       padding: '2px 4px', borderRadius: 'var(--radius-sm)',
-                      color: 'var(--coral)', fontSize: 17, lineHeight: 1,
+                      color: 'var(--coral)', fontSize: 13, lineHeight: 1,
                       opacity: hoveredId === t.id ? 1 : 0,
                       transition: 'opacity 120ms var(--ease)',
                       pointerEvents: hoveredId === t.id ? 'auto' : 'none',
@@ -559,6 +673,29 @@ export default function Ledger() {
                   </button>
                 </div>
               ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Alert banners ── */}
+      {visibleAlerts.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+          {visibleAlerts.map(alert => (
+            <div key={alert.key} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+              padding: '16px',
+              background: alert.type === 'over' ? 'var(--coral-light)' : 'var(--amber-light)',
+              border: `1.5px solid ${alert.type === 'over' ? 'var(--coral)' : 'var(--amber)'}`,
+              borderRadius: 'var(--radius-md)',
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: alert.type === 'over' ? '#9a2a1a' : '#7a5000' }}>
+                {alert.type === 'over' ? '✕' : '⚠'} {alert.msg}
+              </span>
+              <button
+                onClick={() => setDismissedAlerts(prev => new Set([...prev, alert.key]))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-tertiary)', flexShrink: 0, padding: '2px 4px' }}
+              >✕</button>
             </div>
           ))}
         </div>
@@ -575,6 +712,14 @@ export default function Ledger() {
           onClose={() => setShowModal(false)}
           onSaved={handleTransactionSaved}
           onBulkSaved={() => { fetchTransactions(month); fetchBudgetSummary(month) }}
+        />
+      )}
+
+      {showPaymentModal && (
+        <RecordCardPaymentModal
+          accounts={accounts}
+          onClose={() => setShowPaymentModal(false)}
+          onPaid={handlePaymentSaved}
         />
       )}
 

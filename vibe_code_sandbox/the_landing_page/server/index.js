@@ -7,6 +7,10 @@ import recurringRoutes   from './routes/finance/recurring.js'
 import cpfRoutes         from './routes/finance/cpf.js'
 import budgetRoutes      from './routes/finance/budgets.js'
 import bucketRoutes      from './routes/finance/buckets.js'
+import birthdayRoutes    from './routes/finance/birthdays.js'
+import accountRoutes     from './routes/finance/accounts.js'
+import upcomingRoutes    from './routes/finance/upcoming.js'
+import paybackRoutes    from './routes/finance/payback.js'
 
 dotenv.config()
 
@@ -22,6 +26,10 @@ app.use('/api/finance', recurringRoutes)
 app.use('/api/finance', cpfRoutes)
 app.use('/api/finance', budgetRoutes)
 app.use('/api/finance', bucketRoutes)
+app.use('/api/finance', birthdayRoutes)
+app.use('/api/finance', accountRoutes)
+app.use('/api/finance', upcomingRoutes)
+app.use('/api/finance', paybackRoutes)
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)

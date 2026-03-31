@@ -1,12 +1,21 @@
 import { Router } from 'express'
 import { notion } from '../../notion.js'
 import { resolveCat, buildCatMap } from './transactions.js'
+import { getBirthdayBudgetForMonth } from './birthdays.js'
 
 const router = Router()
 const BUDGETS_DB      = () => process.env.NOTION_BUDGETS_DB
 const TRANSACTIONS_DB = () => process.env.NOTION_TRANSACTIONS_DB
 const PLANS_DB        = () => process.env.NOTION_REDUCTION_PLANS_DB
 const LINES_DB        = () => process.env.NOTION_REDUCTION_LINES_DB
+
+// Simple in-memory cache with TTL
+const _cache = new Map()
+function withCache(key, ttlMs, fn) {
+  const hit = _cache.get(key)
+  if (hit && Date.now() - hit.ts < ttlMs) return Promise.resolve(hit.val)
+  return fn().then(val => { _cache.set(key, { val, ts: Date.now() }); return val })
+}
 
 function mapBudget(page, catMap = new Map()) {
   const p = page.properties
@@ -128,41 +137,50 @@ router.get('/budgets/summary', async (req, res) => {
     const lastDay     = new Date(year, mon, 0).getDate()
     const endDate     = `${month}-${String(lastDay).padStart(2, '0')}`
 
-    const catMap = await buildCatMap()
+    const catMap = await withCache('catMap', 2 * 60_000, () => buildCatMap())
 
-    const [budgets, txPages, reductionOverrides] = await Promise.all([
-      getBudgetRows(catMap),
+    const monthNum = parseInt(mon, 10)
+    const [budgets, txPages, reductionOverrides, birthdayBudget] = await Promise.all([
+      withCache(`budgets`, 2 * 60_000, () => getBudgetRows(catMap)),
       queryAll(TRANSACTIONS_DB(), {
         and: [
           { property: 'Date', date: { on_or_after:  startDate } },
           { property: 'Date', date: { on_or_before: endDate   } },
         ],
       }),
-      getReductionOverrides(month),
+      withCache(`reductions:${month}`, 2 * 60_000, () => getReductionOverrides(month)),
+      withCache(`birthdays:${monthNum}`, 2 * 60_000, () => getBirthdayBudgetForMonth(monthNum)),
     ])
 
-    const txns = txPages
-      .map(page => {
-        const p = page.properties
-        const category = resolveCat(p.Category, catMap)
-                      ?? Object.values(p).find(v => v.type === 'title')?.title?.[0]?.plain_text
-                      ?? null
-        return {
-          category,
-          amount:        p.Amount?.number              ?? 0,
-          direction:     p.Direction?.select?.name     ?? null,
-          isBucketSpend: p['Is Bucket Spend']?.checkbox ?? false,
-        }
-      })
-      .filter(tx => tx.direction !== 'Income' && !tx.isBucketSpend)
+    const allMapped = txPages.map(page => {
+      const p = page.properties
+      const category = resolveCat(p.Category, catMap)
+                    ?? Object.values(p).find(v => v.type === 'title')?.title?.[0]?.plain_text
+                    ?? null
+      return {
+        category,
+        amount:        p.Amount?.number              ?? 0,
+        direction:     p.Direction?.select?.name     ?? null,
+        isBucketSpend: p['Is Bucket Spend']?.checkbox ?? false,
+      }
+    })
+
+    const monthIncome = allMapped
+      .filter(tx => tx.direction === 'Income')
+      .reduce((s, tx) => s + tx.amount, 0)
+
+    const txns = allMapped.filter(tx => tx.direction !== 'Income' && !tx.isBucketSpend)
 
     const summary = budgets.map(budget => {
       const budgetCat = budget.category.toLowerCase()
       const spent     = txns
         .filter(tx => tx.category != null && tx.category.toLowerCase() === budgetCat)
         .reduce((s, tx) => s + tx.amount, 0)
-      // Use reduced limit if a spend reduction plan is active for this category
-      const limit = reductionOverrides[budgetCat] ?? budget.monthlyLimit
+      // Birthdays category: limit comes from the Birthdays DB for this month
+      const isBirthdays = budgetCat === 'birthdays' || budgetCat === 'birthday'
+      const limit = isBirthdays && birthdayBudget !== null && birthdayBudget > 0
+        ? birthdayBudget
+        : (reductionOverrides[budgetCat] ?? budget.monthlyLimit)
       const remaining   = limit - spent
       const percentUsed = limit > 0 ? (spent / limit) * 100 : 0
 
@@ -175,7 +193,27 @@ router.get('/budgets/summary', async (req, res) => {
       return { id: budget.id, category: budget.category, monthlyLimit: limit, type: budget.type, spent, remaining, percentUsed, status }
     })
 
-    res.json({ success: true, data: summary })
+    // ── Reconcile: any spend not matched to a budget row ─────────────
+    // This covers transactions whose category resolved to null (e.g. broken
+    // relation), OR whose category simply has no budget row.
+    const totalExpenses   = txns.reduce((s, tx) => s + tx.amount, 0)
+    const budgetCovered   = summary.reduce((s, b) => s + b.spent, 0)
+    const uncategorized   = Math.round((totalExpenses - budgetCovered) * 100) / 100
+
+    if (uncategorized > 0.005) {
+      summary.push({
+        id:           '__uncategorized__',
+        category:     'Uncategorized',
+        monthlyLimit: 0,
+        type:         'Soft',
+        spent:        uncategorized,
+        remaining:    -uncategorized,
+        percentUsed:  100,
+        status:       'zero',
+      })
+    }
+
+    res.json({ success: true, data: summary, income: monthIncome, totalExpenses })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }

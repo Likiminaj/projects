@@ -144,13 +144,20 @@ const DATABASES = [
       Frequency: {
         select: {
           options: [
-            { name: 'Monthly',   color: 'blue'   },
-            { name: 'Annual',    color: 'green'  },
-            { name: 'Quarterly', color: 'yellow' },
-            { name: 'Irregular', color: 'gray'   },
+            { name: 'Monthly', color: 'blue'  },
+            { name: 'Yearly',  color: 'green' },
           ],
         },
       },
+      Type: {
+        select: {
+          options: [
+            { name: 'Fixed',   color: 'purple' },
+            { name: 'Planned', color: 'yellow' },
+          ],
+        },
+      },
+      Month: { number: { format: 'number' } },
       Merchant: { rich_text: {} },
       Category: { select: { options: CATEGORY_OPTIONS } },
       Subcategory: { select: { options: SUBCATEGORY_OPTIONS } },

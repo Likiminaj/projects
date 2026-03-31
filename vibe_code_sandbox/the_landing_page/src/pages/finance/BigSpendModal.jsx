@@ -112,7 +112,7 @@ export default function BigSpendModal({ shortfall, bucketId, bucketName, budgetC
                   <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>$</span>
                   <input
                     className="ds-input"
-                    type="number" min="1" step="1"
+                    type="number" min="0" step="0.01"
                     placeholder="Monthly repayment"
                     style={{ paddingLeft: 26 }}
                     value={monthlyRepayment}
@@ -149,7 +149,7 @@ export default function BigSpendModal({ shortfall, bucketId, bucketName, budgetC
                 {/* Column headers */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 80px 28px', gap: 8 }}>
                   {['Category', 'Reduce by/mo', 'Months', ''].map(h => (
-                    <span key={h} style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)' }}>{h}</span>
+                    <span key={h} style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tertiary)' }}>{h}</span>
                   ))}
                 </div>
 
@@ -174,7 +174,7 @@ export default function BigSpendModal({ shortfall, bucketId, bucketName, budgetC
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>$</span>
                       <input
-                        type="number" min="0" step="1" placeholder="0"
+                        type="number" min="0" step="0.01" placeholder="0"
                         value={row.reduceBy}
                         onChange={e => updateRow(idx, { reduceBy: e.target.value })}
                         style={{

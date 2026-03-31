@@ -80,7 +80,7 @@ export default function CPF() {
         <p className="ds-label" style={{ color: '#7a5000', marginBottom: 'var(--space-2)' }}>Total CPF Balance</p>
 
         <p style={{
-          fontSize: 55,
+          fontSize: 40,
           fontWeight: 800,
           letterSpacing: '-0.04em',
           lineHeight: 1,
@@ -141,7 +141,7 @@ export default function CPF() {
                 display: 'inline-flex', alignItems: 'center',
                 background: 'rgba(255,255,255,0.6)',
                 borderRadius: 'var(--radius-pill)',
-                fontSize: 13, fontWeight: 700,
+                fontSize: 9, fontWeight: 700,
                 color, padding: '3px 8px',
               }}>
                 +{fmtShort(monthly)}/mo
@@ -177,7 +177,7 @@ export default function CPF() {
             </p>
             <button
               className="ds-modal__close"
-              style={{ width: 36, height: 36, fontSize: 17 }}
+              style={{ width: 36, height: 36, fontSize: 13 }}
               onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setError(null) }}
             >
               ✕

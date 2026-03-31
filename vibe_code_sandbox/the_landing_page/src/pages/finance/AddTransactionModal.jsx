@@ -132,7 +132,7 @@ export default function AddTransactionModal({ onClose, onSaved, onBulkSaved, cat
 
     setAddingProgress(null)
     if (failed.length === 0) {
-      onBulkSaved?.()
+      onBulkSaved?.(parsedRows.length)
       onClose()
     } else {
       setParsedRows(failed)
@@ -447,7 +447,7 @@ export default function AddTransactionModal({ onClose, onSaved, onBulkSaved, cat
                 <pre style={{
                   marginTop: 8, padding: '10px 12px',
                   background: 'var(--bg-sunken)', borderRadius: 'var(--radius-sm)',
-                  fontSize: 11, color: 'var(--text-secondary)',
+                  fontSize: 8, color: 'var(--text-secondary)',
                   whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                   maxHeight: 180, overflowY: 'auto', lineHeight: 1.5,
                 }}>
@@ -669,7 +669,7 @@ export default function AddTransactionModal({ onClose, onSaved, onBulkSaved, cat
                             <span style={{ fontSize: 'var(--text-sm)', color: 'var(--green)', fontWeight: 700 }}>
                               {item.amount != null ? `$${Number(item.amount).toFixed(2)}` : '—'}
                             </span>
-                            <span style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>{item.frequency}</span>
+                            <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{item.frequency}</span>
                           </div>
                         ))}
                       </div>

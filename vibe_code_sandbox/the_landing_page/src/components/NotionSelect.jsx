@@ -147,7 +147,7 @@ export default function NotionSelect({
                 border: 'none',
                 cursor: 'pointer',
                 color: 'var(--text-tertiary)',
-                fontSize: 17,
+                fontSize: 13,
                 lineHeight: 1,
                 padding: '2px 4px',
                 borderRadius: 4,
@@ -248,7 +248,7 @@ export default function NotionSelect({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 18,
+                  fontSize: 13,
                   color: 'var(--text-primary)',
                   flexShrink: 0,
                 }}>+</span>
@@ -258,13 +258,13 @@ export default function NotionSelect({
                   color: '#8a5f00',
                   borderRadius: 999,
                   padding: '2px 10px',
-                  fontSize: 16,
+                  fontSize: 12,
                   fontWeight: 600,
                 }}>
                   {query.trim()}
                 </span>
                 {creating && (
-                  <span style={{ marginLeft: 'auto', fontSize: 14, color: 'var(--text-tertiary)' }}>
+                  <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-tertiary)' }}>
                     saving…
                   </span>
                 )}
@@ -300,7 +300,7 @@ function OptionRow({ opt, selected, onSelect, onDelete }) {
       >
         <Chip name={opt.name} color={opt.color} />
         {selected && (
-          <span style={{ marginLeft: 'auto', color: 'var(--text-tertiary)', fontSize: 17, flexShrink: 0 }}>✓</span>
+          <span style={{ marginLeft: 'auto', color: 'var(--text-tertiary)', fontSize: 13, flexShrink: 0 }}>✓</span>
         )}
       </div>
 
@@ -322,7 +322,7 @@ function OptionRow({ opt, selected, onSelect, onDelete }) {
             alignItems: 'center',
             justifyContent: 'center',
             color: 'var(--text-tertiary)',
-            fontSize: 16,
+            fontSize: 12,
             lineHeight: 1,
             padding: 0,
           }}

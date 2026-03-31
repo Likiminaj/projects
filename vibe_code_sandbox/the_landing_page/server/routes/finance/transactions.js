@@ -50,8 +50,19 @@ export async function buildCatMap() {
     }
     if (!dbId) return new Map()
 
-    const res = await notion.databases.query({ database_id: dbId, page_size: 100 })
-    return new Map(res.results.map(pg => [
+    // Paginate to handle any number of category pages
+    const results = []
+    let cursor
+    do {
+      const res = await notion.databases.query({
+        database_id: dbId, page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {}),
+      })
+      results.push(...res.results)
+      cursor = res.has_more ? res.next_cursor : undefined
+    } while (cursor)
+
+    return new Map(results.map(pg => [
       pg.id,
       Object.values(pg.properties).find(v => v.type === 'title')?.title?.[0]?.plain_text ?? '',
     ]))
@@ -92,7 +103,23 @@ router.get('/transactions', async (req, res) => {
       filters.push({ property: 'Date', date: { on_or_after:  firstDay } })
       filters.push({ property: 'Date', date: { on_or_before: lastDay  } })
     }
-    if (category)            filters.push({ property: 'Category',     select:   { equals: category } })
+    if (category) {
+      // Detect Category property type — relation needs a different filter than select
+      const schema = await getSchema()
+      if (_schemaTypes?.Category === 'relation' && CATEGORIES_DB()) {
+        const catPages = await notion.databases.query({
+          database_id: CATEGORIES_DB(),
+          filter: { property: 'Name', title: { equals: category } },
+          page_size: 1,
+        })
+        if (catPages.results.length > 0) {
+          filters.push({ property: 'Category', relation: { contains: catPages.results[0].id } })
+        }
+        // If category page not found, skip the filter — returns all transactions (better than empty)
+      } else {
+        filters.push({ property: 'Category', select: { equals: category } })
+      }
+    }
     if (source)              filters.push({ property: 'Source',        select:   { equals: source  } })
     if (needsReview === 'true') filters.push({ property: 'Needs Review', checkbox: { equals: true  } })
 
