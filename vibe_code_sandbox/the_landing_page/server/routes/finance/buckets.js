@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { notion } from '../../notion.js'
+import { buildCatMap, buildCategoryProperty, resolveCat } from './transactions.js'
 
 const router     = Router()
 const DB         = () => process.env.NOTION_BUCKETS_DB
@@ -190,15 +191,21 @@ router.post('/buckets/:id/reduction-plan', async (req, res) => {
     }
 
     // Look up original budget limits
+    const catMap = await buildCatMap()
     const budgetPages = BUDGETS_DB()
       ? await queryAll(BUDGETS_DB(), { property: 'Active', checkbox: { equals: true } })
       : []
     const budgetMap = {}
     for (const pg of budgetPages) {
       const p   = pg.properties
-      const cat = Object.values(p).find(v => v.type === 'title')?.title?.[0]?.plain_text ?? ''
+      const cat = resolveCat(p.Category, catMap)
+        ?? Object.values(p).find(v => v.type === 'title')?.title?.[0]?.plain_text
+        ?? ''
       if (cat) budgetMap[cat.toLowerCase()] = p['Monthly Limit']?.number ?? 0
     }
+
+    const linesDb = await notion.databases.retrieve({ database_id: LINES_DB() })
+    const lineSchemaTypes = Object.fromEntries(Object.entries(linesDb.properties).map(([k, v]) => [k, v.type]))
 
     // Calculate plan date range
     const now        = new Date()
@@ -232,7 +239,7 @@ router.post('/buckets/:id/reduction-plan', async (req, res) => {
         parent: { database_id: LINES_DB() },
         properties: {
           Plan:             { relation: [{ id: plan.id }] },
-          Category:         { select: { name: r.category } },
+          ...(await buildCategoryProperty(r.category, lineSchemaTypes)),
           'Original Limit': { number: origLimit },
           'Reduced Limit':  { number: reducedLimit },
           Months:           { number: r.months },

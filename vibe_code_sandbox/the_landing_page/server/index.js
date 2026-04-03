@@ -11,6 +11,11 @@ import birthdayRoutes    from './routes/finance/birthdays.js'
 import accountRoutes     from './routes/finance/accounts.js'
 import upcomingRoutes    from './routes/finance/upcoming.js'
 import paybackRoutes    from './routes/finance/payback.js'
+import snapshotRoutes   from './routes/finance/snapshots.js'
+import taskRoutes       from './routes/tasks.js'
+import habitRoutes      from './routes/habits/habits.js'
+import habitLogRoutes   from './routes/habits/logs.js'
+import habitReviewRoutes from './routes/habits/review.js'
 
 dotenv.config()
 
@@ -30,6 +35,11 @@ app.use('/api/finance', birthdayRoutes)
 app.use('/api/finance', accountRoutes)
 app.use('/api/finance', upcomingRoutes)
 app.use('/api/finance', paybackRoutes)
+app.use('/api/finance', snapshotRoutes)
+app.use('/api/tasks', taskRoutes)
+app.use('/api/habits', habitReviewRoutes)
+app.use('/api/habits', habitLogRoutes)
+app.use('/api/habits', habitRoutes)
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)

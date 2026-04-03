@@ -17,6 +17,23 @@ async function getSchema() {
   return _schema
 }
 
+export async function buildCategoryProperty(category) {
+  if (!category) return {}
+  if (!_schemaTypes) await getSchema()
+  if (_schemaTypes?.Category === 'relation' && CATEGORIES_DB()) {
+    const cats = await notion.databases.query({
+      database_id: CATEGORIES_DB(),
+      filter: { property: 'Name', title: { equals: category } },
+      page_size: 1,
+    })
+    if (cats.results.length > 0) {
+      return { Category: { relation: [{ id: cats.results[0].id }] } }
+    }
+    return {}
+  }
+  return { Category: { select: { name: category } } }
+}
+
 // ── Category resolution ───────────────────────────────────────────
 // Handles Select (legacy), Relation (relational setup), Rollup, Formula
 export function resolveCat(prop, catMap = new Map()) {
@@ -163,9 +180,10 @@ router.post('/transactions', async (req, res) => {
       Notes:           { rich_text: notes ? [{ text: { content: notes } }] : [] },
       'Is Pending Matcha': { checkbox: isPendingMatcha ?? false },
       'Is Bucket Spend':   { checkbox: false },
-      'Auto Parsed':       { checkbox: false },
-      'Needs Review':      { checkbox: !category },
     }
+
+    if (schema.has('Auto Parsed'))  properties['Auto Parsed']  = { checkbox: false }
+    if (schema.has('Needs Review')) properties['Needs Review'] = { checkbox: !category }
 
     if (schema.has('Merchant') && merchant) {
       properties.Merchant = { rich_text: [{ text: { content: merchant } }] }
@@ -173,20 +191,7 @@ router.post('/transactions', async (req, res) => {
 
     // Set category — handle both Select and Relation property types
     if (category) {
-      const catType = _schemaTypes?.Category
-      if (catType === 'relation' && CATEGORIES_DB()) {
-        // Look up the category page by name and link it
-        const cats = await notion.databases.query({
-          database_id: CATEGORIES_DB(),
-          filter: { property: 'Name', title: { equals: category } },
-          page_size: 1,
-        })
-        if (cats.results.length > 0) {
-          properties.Category = { relation: [{ id: cats.results[0].id }] }
-        }
-      } else {
-        properties.Category = { select: { name: category } }
-      }
+      Object.assign(properties, await buildCategoryProperty(category))
     }
 
     const catMap = await buildCatMap()

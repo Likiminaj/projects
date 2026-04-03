@@ -83,9 +83,9 @@ body {
 
 /* ── Layout ──────────────────────────────────────────────────── */
 .ds-page {
-  max-width: 864px;
+  max-width: 1296px;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-5) var(--space-8);
+  padding: var(--space-6) var(--space-5) 100px;
 }
 
 /* ── Card ────────────────────────────────────────────────────── */

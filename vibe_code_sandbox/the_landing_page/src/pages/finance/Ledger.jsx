@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import AddTransactionModal from './AddTransactionModal.jsx'
 import BucketsSection from './BucketsSection.jsx'
 import BigSpendModal from './BigSpendModal.jsx'
-import RecordCardPaymentModal from './RecordCardPaymentModal.jsx'
+import CircularRing from '../../components/CircularRing.jsx'
 
 const PILL_COLORS = {
   gray:    { bg: '#F0EBE3', text: '#78716C' },
@@ -76,33 +76,6 @@ function CategoryPill({ category, color }) {
 
 const OPTS_CACHE_KEY = 'life-os:options'
 
-function CircularRing({ percent, size = 44, stroke = 5, color = 'var(--green)', label }) {
-  const pct = Math.min(Math.max(percent, 0), 100)
-  const r = (size - stroke) / 2
-  const circ = 2 * Math.PI * r
-  const offset = circ - (pct / 100) * circ
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} style={{ display: 'block', transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg-sunken)" strokeWidth={stroke} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={circ} strokeDashoffset={offset}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 500ms ease' }}
-        />
-      </svg>
-      {label !== undefined && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: size < 48 ? 9 : 11, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em',
-        }}>
-          {label}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function isLiabilityAccount(account) {
   if (account.role) return account.role === 'liability'
   const value = `${account.name ?? ''} ${account.type ?? ''}`.toLowerCase()
@@ -138,8 +111,6 @@ export default function Ledger() {
   const [deletingId, setDeletingId]     = useState(null)
 
   const [accounts, setAccounts]         = useState([])
-  const [accountsLoading, setAccountsLoading] = useState(false)
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
 
   // Budget state
   const [budgetSummary, setBudgetSummary]   = useState([])
@@ -169,7 +140,7 @@ export default function Ledger() {
   const [options, setOptions] = useState(
     () => readCache() ?? { categories: [], sources: [] }
   )
-  const { categories, sources } = options
+  const { categories } = options
 
   function patchOptions(key, updater) {
     setOptions(prev => {
@@ -191,14 +162,11 @@ export default function Ledger() {
   }
 
   async function fetchAccounts() {
-    setAccountsLoading(true)
     try {
       const res = await fetch('/api/finance/accounts')
       const json = await res.json()
       if (json.success) setAccounts(json.data)
-    } finally {
-      setAccountsLoading(false)
-    }
+    } catch {}
   }
 
   async function revalidateOptions() {
@@ -307,11 +275,6 @@ export default function Ledger() {
     setFilter('All')
   }
 
-  async function handlePaymentSaved() {
-    setShowPaymentModal(false)
-    await fetchAccounts()
-  }
-
   const income   = allTransactions.filter(t => t.direction === 'Income').reduce((s, t) => s + t.amount, 0)
   const expenses = allTransactions.filter(t => t.direction === 'Expense' && !t.isBucketSpend).reduce((s, t) => s + t.amount, 0)
   const net      = income - expenses
@@ -323,6 +286,12 @@ export default function Ledger() {
   const cashTotal = cashAccounts.reduce((s, a) => s + a.balance, 0)
   const liabilityTotal = liabilityAccounts.reduce((s, a) => s + a.balance, 0)
   const netWorth = assetTotal - liabilityTotal
+
+  // ── Savings computed values ─────────────────────────────────────────────────
+  const totalBucketCommitments = buckets
+    .filter(b => b.status === 'Active' || b.status === 'Funded')
+    .reduce((s, b) => s + (b.type === 'Repayment' ? (b.monthlyRepayment || 0) : (b.monthlyTopUp || 0)), 0)
+  const monthlySavings = net - totalBucketCommitments
 
   // ── Budget computed values ──────────────────────────────────────────────────
   const activeBudgets = budgetSummary.filter(b => b.monthlyLimit > 0)
@@ -366,16 +335,7 @@ export default function Ledger() {
 
       <div className="ds-row" style={{ justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
         <h1 className="ds-heading" style={{ fontSize: 'var(--text-xl)', margin: 0 }}>Ledger</h1>
-        <div className="ds-row ds-gap-2">
-          <button
-            className="ds-btn ds-btn--outline ds-btn--sm"
-            onClick={() => setShowPaymentModal(true)}
-            disabled={accountsLoading || cashAccounts.length === 0 || liabilityAccounts.length === 0}
-          >
-            Record card payment
-          </button>
-          <button className="ds-btn ds-btn--primary" onClick={() => { revalidateOptions(); setShowModal(true) }}>+ Add</button>
-        </div>
+        <button className="ds-btn ds-btn--primary" onClick={() => { revalidateOptions(); setShowModal(true) }}>+ Add</button>
       </div>
 
       {/* ── Month nav ── */}
@@ -386,27 +346,6 @@ export default function Ledger() {
             {formatMonthLabel(month)}
           </span>
           <button className="ds-btn ds-btn--icon" onClick={() => changeMonth(1)}>›</button>
-        </div>
-      </div>
-
-      <div style={{
-        background: net >= 0 ? 'var(--green-light)' : 'var(--coral-light)',
-        border: `1.5px solid ${net >= 0 ? 'var(--green)' : 'var(--coral)'}`,
-        borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)', marginBottom: 24,
-      }}>
-        <p className="ds-label" style={{ color: net >= 0 ? '#1e5c1b' : '#9a2a1a', marginBottom: 'var(--space-2)' }}>
-          Net · {formatMonthLabel(month)}
-        </p>
-        <p style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: net >= 0 ? '#1e5c1b' : '#9a2a1a', marginBottom: 'var(--space-3)' }}>
-          {net >= 0 ? '+' : ''}${net.toFixed(2)}
-        </p>
-        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--green)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#1e5c1b', padding: '4px 12px' }}>
-            ↑ ${income.toFixed(2)}
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--coral)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#9a2a1a', padding: '4px 12px' }}>
-            ↓ ${expenses.toFixed(2)}
-          </span>
         </div>
       </div>
 
@@ -542,184 +481,237 @@ export default function Ledger() {
         </div>
       )}
 
-      {/* ── Buckets section ── */}
-      <BucketsSection
-        buckets={buckets}
-        loading={bucketsLoading}
-        onRefresh={fetchBuckets}
-        categories={categories}
-      />
+      {/* ── 2-column layout ── */}
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
 
-      {/* ── Budget card ── */}
-      {(budgetSummary.length > 0 || budgetsLoading) && (
-        <div
-          className={`ds-card ds-card--padded${budgetsLoading ? '' : ' ds-card--clickable'}`}
-          onClick={() => !budgetsLoading && setShowBudgetModal(true)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={e => e.key === 'Enter' && !budgetsLoading && setShowBudgetModal(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}
-        >
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)', flex: 1 }}>
-                Budget · {formatMonthLabel(month)}
-              </span>
-              <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>›</span>
-            </div>
-            {totalBudget > 0 && (
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                ${totalSpent.toFixed(0)} spent · ${Math.max(totalBudget - totalSpent, 0).toFixed(0)} left
-              </span>
-            )}
-          </div>
-          {totalBudget > 0 && (
-            <CircularRing
-              percent={totalPercent}
-              size={64}
-              stroke={6}
-              color={totalStatus === 'over' ? 'var(--coral)' : totalStatus === 'warning' ? 'var(--amber)' : 'var(--green)'}
-              label={`${Math.round(totalPercent)}%`}
-            />
-          )}
-        </div>
-      )}
+        {/* ── Main column ── */}
+        <div style={{ flex: 1, minWidth: 0 }}>
 
-      {/* ── Filters ── */}
-      <div className="ds-row" style={{ gap: 12, flexWrap: 'wrap', marginBottom: 16, justifyContent: 'space-between' }}>
-        <div className="ds-row ds-gap-2" style={{ flexWrap: 'wrap' }}>
-          {[
-            { label: 'All',          active: 'ds-chip--active'      },
-            { label: 'Income',       active: 'ds-chip--green-active' },
-            { label: 'Expense',      active: 'ds-chip--coral-active' },
-            { label: 'Needs Review', active: 'ds-chip--amber-active' },
-          ].map(({ label, active }) => (
-            <button
-              key={label}
-              className={`ds-chip${filter === label ? ` ${active}` : ''}`}
-              onClick={() => setFilter(label)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Transaction list ── */}
-      {loading ? (
-        <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 48 }}>Loading…</p>
-      ) : grouped.length === 0 ? (
-        <div className="ds-card ds-card--padded ds-card--dashed" style={{ textAlign: 'center', padding: 48 }}>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>No transactions found.</p>
-        </div>
-      ) : (
-        <div className="ds-col" style={{ gap: 24 }}>
-          {grouped.map(([dateKey, txns]) => (
-            <div key={dateKey} className="ds-card">
-              <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-                <span className="ds-label">{formatDateHeading(dateKey)}</span>
+          {/* Hero row: Net + Savings side by side */}
+          <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+            {/* Net card */}
+            <div style={{
+              flex: 1,
+              background: net >= 0 ? 'var(--green-light)' : 'var(--coral-light)',
+              border: `1.5px solid ${net >= 0 ? 'var(--green)' : 'var(--coral)'}`,
+              borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)',
+            }}>
+              <p className="ds-label" style={{ color: net >= 0 ? '#1e5c1b' : '#9a2a1a', marginBottom: 'var(--space-2)' }}>
+                Net · {formatMonthLabel(month)}
+              </p>
+              <p style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: net >= 0 ? '#1e5c1b' : '#9a2a1a', marginBottom: 'var(--space-3)' }}>
+                {net >= 0 ? '+' : ''}${net.toFixed(2)}
+              </p>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--green)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#1e5c1b', padding: '4px 10px' }}>
+                  ↑ ${income.toFixed(2)}
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--coral)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#9a2a1a', padding: '4px 10px' }}>
+                  ↓ ${expenses.toFixed(2)}
+                </span>
               </div>
-              {txns.map((t, i) => (
-                <div
-                  key={t.id}
-                  onMouseEnter={() => setHoveredId(t.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                    minHeight: 48,
-                    borderBottom: i < txns.length - 1 ? '1px solid #D0C8BE' : 'none',
-                    opacity: t.isBucketSpend ? 0.55 : 1,
-                  }}
-                >
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                    background: t.direction === 'Income' ? 'var(--green)' : t.isBucketSpend ? 'var(--lavender)' : 'var(--coral)',
-                  }} />
-                  <div className="ds-col ds-flex-1" style={{ gap: 2 }}>
-                    <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)', fontStyle: t.isBucketSpend ? 'italic' : 'normal' }}>
-                      {t.title || '—'}
-                    </span>
-                    {t.merchant && (
-                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{t.merchant}</span>
-                    )}
-                  </div>
-                  <CategoryPill
-                    category={t.isBucketSpend ? 'Bucket' : shortCategory(t.category)}
-                    color={(categories.find(c => c.name === t.category) ?? {}).color}
-                  />
-                  <span style={{
-                    fontWeight: 700, fontSize: 'var(--text-sm)',
-                    minWidth: 76, textAlign: 'right', flexShrink: 0,
-                    color: t.direction === 'Income' ? 'var(--green)' : 'var(--text-primary)',
-                  }}>
-                    {t.direction === 'Income' ? '+' : '−'}${t.amount.toFixed(2)}
+            </div>
+
+            {/* Savings card */}
+            <div style={{
+              flex: 1,
+              background: 'var(--lavender-light)',
+              border: '1.5px solid var(--lavender)',
+              borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)',
+            }}>
+              <p className="ds-label" style={{ color: '#5B3D7A', marginBottom: 'var(--space-2)' }}>
+                Savings · {formatMonthLabel(month)}
+              </p>
+              <p style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: monthlySavings >= 0 ? '#5B3D7A' : '#9a2a1a', marginBottom: 'var(--space-3)' }}>
+                {monthlySavings >= 0 ? '+' : ''}${monthlySavings.toFixed(2)}
+              </p>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--coral)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#9a2a1a', padding: '4px 10px' }}>
+                  ↓ ${expenses.toFixed(2)} spent
+                </span>
+                {totalBucketCommitments > 0 && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--sky)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#1A5C8A', padding: '4px 10px' }}>
+                    ↓ ${totalBucketCommitments.toFixed(2)} buckets
                   </span>
-                  {t.needsReview && <span className="ds-badge ds-badge--amber" style={{ flexShrink: 0 }}>Review</span>}
-                  <button
-                    onClick={() => handleDelete(t.id)}
-                    disabled={deletingId === t.id}
-                    style={{
-                      flexShrink: 0, background: 'none', border: 'none',
-                      cursor: deletingId === t.id ? 'wait' : 'pointer',
-                      padding: '2px 4px', borderRadius: 'var(--radius-sm)',
-                      color: 'var(--coral)', fontSize: 13, lineHeight: 1,
-                      opacity: hoveredId === t.id ? 1 : 0,
-                      transition: 'opacity 120ms var(--ease)',
-                      pointerEvents: hoveredId === t.id ? 'auto' : 'none',
-                    }}
-                    aria-label="Delete transaction"
-                  >
-                    {deletingId === t.id ? '…' : '✕'}
-                  </button>
+                )}
+                {cashTotal > 0 && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.6)', border: '1.5px solid var(--lavender)', borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', fontWeight: 700, color: '#5B3D7A', padding: '4px 10px' }}>
+                    Σ ${cashTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Filters ── */}
+          <div className="ds-row" style={{ gap: 12, flexWrap: 'wrap', marginBottom: 16, justifyContent: 'space-between' }}>
+            <div className="ds-row ds-gap-2" style={{ flexWrap: 'wrap' }}>
+              {[
+                { label: 'All',          active: 'ds-chip--active'      },
+                { label: 'Income',       active: 'ds-chip--green-active' },
+                { label: 'Expense',      active: 'ds-chip--coral-active' },
+                { label: 'Needs Review', active: 'ds-chip--amber-active' },
+              ].map(({ label, active }) => (
+                <button
+                  key={label}
+                  className={`ds-chip${filter === label ? ` ${active}` : ''}`}
+                  onClick={() => setFilter(label)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Transaction list ── */}
+          {loading ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 48 }}>Loading…</p>
+          ) : grouped.length === 0 ? (
+            <div className="ds-card ds-card--padded ds-card--dashed" style={{ textAlign: 'center', padding: 48 }}>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>No transactions found.</p>
+            </div>
+          ) : (
+            <div className="ds-col" style={{ gap: 24 }}>
+              {grouped.map(([dateKey, txns]) => (
+                <div key={dateKey} className="ds-card">
+                  <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
+                    <span className="ds-label">{formatDateHeading(dateKey)}</span>
+                  </div>
+                  {txns.map((t, i) => (
+                    <div
+                      key={t.id}
+                      onMouseEnter={() => setHoveredId(t.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                        minHeight: 48,
+                        borderBottom: i < txns.length - 1 ? '1px solid #D0C8BE' : 'none',
+                        opacity: t.isBucketSpend ? 0.55 : 1,
+                      }}
+                    >
+                      <div style={{
+                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                        background: t.direction === 'Income' ? 'var(--green)' : t.isBucketSpend ? 'var(--lavender)' : 'var(--coral)',
+                      }} />
+                      <div className="ds-col ds-flex-1" style={{ gap: 2 }}>
+                        <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)', fontStyle: t.isBucketSpend ? 'italic' : 'normal' }}>
+                          {t.title || '—'}
+                        </span>
+                        {t.merchant && (
+                          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{t.merchant}</span>
+                        )}
+                      </div>
+                      <CategoryPill
+                        category={t.isBucketSpend ? 'Bucket' : shortCategory(t.category)}
+                        color={(categories.find(c => c.name === t.category) ?? {}).color}
+                      />
+                      <span style={{
+                        fontWeight: 700, fontSize: 'var(--text-sm)',
+                        minWidth: 76, textAlign: 'right', flexShrink: 0,
+                        color: t.direction === 'Income' ? 'var(--green)' : 'var(--text-primary)',
+                      }}>
+                        {t.direction === 'Income' ? '+' : '−'}${t.amount.toFixed(2)}
+                      </span>
+                      {t.needsReview && <span className="ds-badge ds-badge--amber" style={{ flexShrink: 0 }}>Review</span>}
+                      <button
+                        onClick={() => handleDelete(t.id)}
+                        disabled={deletingId === t.id}
+                        style={{
+                          flexShrink: 0, background: 'none', border: 'none',
+                          cursor: deletingId === t.id ? 'wait' : 'pointer',
+                          padding: '2px 4px', borderRadius: 'var(--radius-sm)',
+                          color: 'var(--coral)', fontSize: 13, lineHeight: 1,
+                          opacity: hoveredId === t.id ? 1 : 0,
+                          transition: 'opacity 120ms var(--ease)',
+                          pointerEvents: hoveredId === t.id ? 'auto' : 'none',
+                        }}
+                        aria-label="Delete transaction"
+                      >
+                        {deletingId === t.id ? '…' : '✕'}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* ── Alert banners ── */}
-      {visibleAlerts.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-          {visibleAlerts.map(alert => (
-            <div key={alert.key} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-              padding: '16px',
-              background: alert.type === 'over' ? 'var(--coral-light)' : 'var(--amber-light)',
-              border: `1.5px solid ${alert.type === 'over' ? 'var(--coral)' : 'var(--amber)'}`,
-              borderRadius: 'var(--radius-md)',
-            }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: alert.type === 'over' ? '#9a2a1a' : '#7a5000' }}>
-                {alert.type === 'over' ? '✕' : '⚠'} {alert.msg}
-              </span>
-              <button
-                onClick={() => setDismissedAlerts(prev => new Set([...prev, alert.key]))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-tertiary)', flexShrink: 0, padding: '2px 4px' }}
-              >✕</button>
+          {/* ── Alert banners ── */}
+          {visibleAlerts.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
+              {visibleAlerts.map(alert => (
+                <div key={alert.key} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                  padding: '16px',
+                  background: alert.type === 'over' ? 'var(--coral-light)' : 'var(--amber-light)',
+                  border: `1.5px solid ${alert.type === 'over' ? 'var(--coral)' : 'var(--amber)'}`,
+                  borderRadius: 'var(--radius-md)',
+                }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: alert.type === 'over' ? '#9a2a1a' : '#7a5000' }}>
+                    {alert.type === 'over' ? '✕' : '⚠'} {alert.msg}
+                  </span>
+                  <button
+                    onClick={() => setDismissedAlerts(prev => new Set([...prev, alert.key]))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-tertiary)', flexShrink: 0, padding: '2px 4px' }}
+                  >✕</button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
+
+        {/* ── Right sidebar: Buckets + Budget ── */}
+        <div style={{ width: 400, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <BucketsSection
+            buckets={buckets}
+            loading={bucketsLoading}
+            onRefresh={fetchBuckets}
+          />
+          {(budgetSummary.length > 0 || budgetsLoading) && (
+            <div
+              className={`ds-card ds-card--padded${budgetsLoading ? '' : ' ds-card--clickable'}`}
+              onClick={() => !budgetsLoading && setShowBudgetModal(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => e.key === 'Enter' && !budgetsLoading && setShowBudgetModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 16 }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)', flex: 1 }}>
+                    Budget · {formatMonthLabel(month)}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>›</span>
+                </div>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  {totalBudget > 0
+                    ? `$${totalSpent.toFixed(0)} spent · $${Math.max(totalBudget - totalSpent, 0).toFixed(0)} left`
+                    : budgetsLoading ? 'Loading…' : 'No budget set'}
+                </span>
+              </div>
+              {totalBudget > 0 && (
+                <CircularRing
+                  percent={totalPercent}
+                  size={52}
+                  stroke={5}
+                  color={totalStatus === 'over' ? 'var(--coral)' : totalStatus === 'warning' ? 'var(--amber)' : 'var(--green)'}
+                  label={`${Math.round(totalPercent)}%`}
+                />
+              )}
+            </div>
+          )}
+        </div>
+
+      </div>
 
       {/* ── Add transaction modal ── */}
       {showModal && (
         <AddTransactionModal
           categories={categories}
-          sources={sources}
           buckets={buckets}
-          onSourceAdded={opt  => patchOptions('sources', prev => [...prev, opt])}
-          onSourceDeleted={name => patchOptions('sources', prev => prev.filter(o => o.name !== name))}
           onClose={() => setShowModal(false)}
           onSaved={handleTransactionSaved}
           onBulkSaved={() => { fetchTransactions(month); fetchBudgetSummary(month) }}
-        />
-      )}
-
-      {showPaymentModal && (
-        <RecordCardPaymentModal
-          accounts={accounts}
-          onClose={() => setShowPaymentModal(false)}
-          onPaid={handlePaymentSaved}
         />
       )}
 

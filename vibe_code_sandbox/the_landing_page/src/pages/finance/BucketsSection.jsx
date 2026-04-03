@@ -1,31 +1,5 @@
 import { useState } from 'react'
-
-function CircularRing({ percent, size = 44, stroke = 5, color = 'var(--green)', label }) {
-  const pct = Math.min(Math.max(percent, 0), 100)
-  const r = (size - stroke) / 2
-  const circ = 2 * Math.PI * r
-  const offset = circ - (pct / 100) * circ
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} style={{ display: 'block', transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg-sunken)" strokeWidth={stroke} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={circ} strokeDashoffset={offset}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 500ms ease' }}
-        />
-      </svg>
-      {label !== undefined && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: size < 48 ? 9 : 11, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em',
-        }}>
-          {label}
-        </div>
-      )}
-    </div>
-  )
-}
+import CircularRing from '../../components/CircularRing.jsx'
 
 const TYPE_COLORS = {
   Permanent: { bg: '#DDF0F8', text: '#1A5C8A' },
@@ -45,14 +19,13 @@ function TypeBadge({ type }) {
   )
 }
 
-
-function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
-  const [expanded, setExpanded]       = useState(false)
-  const [allocInput, setAllocInput]   = useState('')
-  const [allocating, setAllocating]   = useState(false)
-  const [confirming, setConfirming]   = useState(false)
-  const [dissolving, setDissolving]   = useState(false)
-  const [err, setErr]                 = useState(null)
+function BucketRow({ bucket, onRefresh }) {
+  const [expanded, setExpanded]     = useState(false)
+  const [allocInput, setAllocInput] = useState('')
+  const [allocating, setAllocating] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [dissolving, setDissolving] = useState(false)
+  const [err, setErr]               = useState(null)
 
   async function submitAllocate() {
     const amt = parseFloat(allocInput)
@@ -87,8 +60,7 @@ function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
   const months = bucket.monthsRemaining
 
   return (
-    <div style={{ borderBottom: '1.5px solid var(--border)' }}>
-      {/* Main row */}
+    <div style={{ borderBottom: '1px solid var(--border)' }}>
       <div
         onClick={() => setExpanded(v => !v)}
         style={{
@@ -131,11 +103,8 @@ function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
         </span>
       </div>
 
-      {/* Expanded detail */}
       {expanded && (
         <div style={{ padding: '12px 20px 18px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-          {/* Allocate */}
           {!isRepayment && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ position: 'relative', flex: 1 }}>
@@ -163,7 +132,6 @@ function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
             </div>
           )}
 
-          {/* Repayment info */}
           {isRepayment && (
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
               Monthly repayment: <strong>${bucket.monthlyRepayment.toFixed(2)}</strong>
@@ -173,7 +141,6 @@ function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
 
           {err && <p style={{ fontSize: 'var(--text-xs)', color: 'var(--coral)', margin: 0 }}>{err}</p>}
 
-          {/* Dissolve */}
           {!confirming ? (
             <button
               onClick={e => { e.stopPropagation(); setConfirming(true) }}
@@ -206,15 +173,24 @@ function BucketRow({ bucket, onAllocate, onDissolve, onRefresh }) {
 
 const EMPTY_FORM = { name: '', type: 'Temporary', targetAmount: '', monthlyTopUp: '', targetDate: '' }
 
-export default function BucketsSection({ buckets, loading, onRefresh, categories }) {
+export default function BucketsSection({ buckets, loading, onRefresh }) {
+  const [showModal, setShowModal]       = useState(false)
   const [showNew, setShowNew]           = useState(false)
   const [form, setForm]                 = useState(EMPTY_FORM)
   const [saving, setSaving]             = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
   const [err, setErr]                   = useState(null)
 
-  const active     = buckets.filter(b => b.type !== 'Repayment')
-  const repayments = buckets.filter(b => b.type === 'Repayment')
+  const active     = buckets.filter(b => b.status !== 'Completed' && b.status !== 'Dissolved' && b.type !== 'Repayment')
+  const repayments = buckets.filter(b => b.type === 'Repayment' && b.status !== 'Completed' && b.status !== 'Dissolved')
+
+  const totalCommitted =
+    active.reduce((s, b) => s + (b.monthlyTopUp || 0), 0) +
+    repayments.reduce((s, b) => s + (b.monthlyRepayment || 0), 0)
+
+  const totalCurrentAmount = active.reduce((s, b) => s + b.currentAmount, 0)
+  const totalTargetAmount  = active.reduce((s, b) => s + b.targetAmount,  0)
+  const overallPct         = totalTargetAmount > 0 ? (totalCurrentAmount / totalTargetAmount) * 100 : 0
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -240,105 +216,177 @@ export default function BucketsSection({ buckets, loading, onRefresh, categories
     finally { setSaving(false) }
   }
 
+  function closeModal() {
+    setShowModal(false)
+    setShowNew(false)
+    setForm(EMPTY_FORM)
+    setErr(null)
+  }
+
+  // ── Compact card ─────────────────────────────────────────────────
   return (
-    <div className="ds-card" style={{ marginBottom: 24 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1.5px solid var(--border)' }}>
-        <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>Savings Buckets</span>
-        <button className="ds-btn ds-btn--outline ds-btn--sm" onClick={() => { setShowNew(v => !v); setErr(null) }}>
-          {showNew ? 'Cancel' : '+ New bucket'}
-        </button>
+    <>
+      <div
+        className={`ds-card ds-card--padded${loading ? '' : ' ds-card--clickable'}`}
+        onClick={() => !loading && setShowModal(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && !loading && setShowModal(true)}
+        style={{ display: 'flex', alignItems: 'center', gap: 16 }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)', flex: 1 }}>
+              Buckets
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>›</span>
+          </div>
+          {loading ? (
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Loading…</span>
+          ) : active.length > 0 || repayments.length > 0 ? (
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 500 }}>
+              ${totalCommitted.toFixed(0)}/mo committed · {active.length} active
+            </span>
+          ) : (
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>No active buckets</span>
+          )}
+        </div>
+        {!loading && active.length > 0 && (
+          <CircularRing
+            percent={overallPct}
+            size={64}
+            stroke={6}
+            color={overallPct >= 100 ? 'var(--green)' : overallPct >= 80 ? 'var(--amber)' : 'var(--sky)'}
+            label={`${Math.round(overallPct)}%`}
+          />
+        )}
       </div>
 
-      {/* New bucket form */}
-      {showNew && (
-        <form onSubmit={handleCreate} style={{ padding: '16px 20px', borderBottom: '1.5px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <input
-              className="ds-input" placeholder="Bucket name" required style={{ flex: 2, minWidth: 140 }}
-              value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            />
-            <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 160 }}>
-              {['Temporary', 'Permanent'].map(t => (
-                <button key={t} type="button"
-                  onClick={() => setForm(f => ({ ...f, type: t }))}
-                  style={{
-                    flex: 1, padding: '10px 12px', borderRadius: 999, cursor: 'pointer',
-                    fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 700,
-                    border: '2px solid var(--amber)',
-                    background: form.type === t ? 'var(--amber)' : 'transparent',
-                    color: form.type === t ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  }}
-                >{t}</button>
-              ))}
+      {/* ── Modal ── */}
+      {showModal && (
+        <div className="ds-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) closeModal() }}>
+          <div className="ds-modal">
+            <div className="ds-modal__header">
+              <h2 className="ds-heading" style={{ fontSize: 'var(--text-lg)' }}>Buckets</h2>
+              <button className="ds-modal__close" onClick={closeModal} aria-label="Close">✕</button>
+            </div>
+
+            <div className="ds-modal__body" style={{ gap: 16 }}>
+              {/* Stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 12 }}>
+                <div style={{ background: 'var(--sky-light)', borderRadius: 'var(--radius-md)', padding: 14 }}>
+                  <p className="ds-label" style={{ color: '#1A5C8A', marginBottom: 6 }}>Committed/mo</p>
+                  <p style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800 }}>${totalCommitted.toFixed(0)}</p>
+                </div>
+                <div style={{ background: 'var(--green-light)', borderRadius: 'var(--radius-md)', padding: 14 }}>
+                  <p className="ds-label" style={{ color: '#1e5c1b', marginBottom: 6 }}>In buckets</p>
+                  <p style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800 }}>${totalCurrentAmount.toFixed(0)}</p>
+                </div>
+                <div style={{ background: 'var(--lavender-light)', borderRadius: 'var(--radius-md)', padding: 14 }}>
+                  <p className="ds-label" style={{ color: '#5B3D7A', marginBottom: 6 }}>Active</p>
+                  <p style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800 }}>{active.length}</p>
+                </div>
+              </div>
+
+              {/* New bucket form */}
+              {showNew && (
+                <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, background: 'var(--bg-sunken)', borderRadius: 'var(--radius-md)' }}>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <input
+                      className="ds-input" placeholder="Bucket name" required style={{ flex: 2, minWidth: 140 }}
+                      value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    />
+                    <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 160 }}>
+                      {['Temporary', 'Permanent'].map(t => (
+                        <button key={t} type="button"
+                          onClick={() => setForm(f => ({ ...f, type: t }))}
+                          style={{
+                            flex: 1, padding: '10px 12px', borderRadius: 999, cursor: 'pointer',
+                            fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 700,
+                            border: '2px solid var(--amber)',
+                            background: form.type === t ? 'var(--amber)' : 'transparent',
+                            color: form.type === t ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          }}
+                        >{t}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative', flex: 1, minWidth: 120 }}>
+                      <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>$</span>
+                      <input className="ds-input" type="number" min="0" step="0.01" placeholder="Target amount" required
+                        style={{ paddingLeft: 26, width: '100%' }}
+                        value={form.targetAmount} onChange={e => setForm(f => ({ ...f, targetAmount: e.target.value }))}
+                      />
+                    </div>
+                    <div style={{ position: 'relative', flex: 1, minWidth: 120 }}>
+                      <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>$</span>
+                      <input className="ds-input" type="number" min="0" step="0.01" placeholder="Monthly top-up"
+                        style={{ paddingLeft: 26, width: '100%' }}
+                        value={form.monthlyTopUp} onChange={e => setForm(f => ({ ...f, monthlyTopUp: e.target.value }))}
+                      />
+                    </div>
+                    {form.type === 'Temporary' && (
+                      <input className="ds-input" type="date" style={{ flex: 1, minWidth: 140 }}
+                        value={form.targetDate} onChange={e => setForm(f => ({ ...f, targetDate: e.target.value }))}
+                      />
+                    )}
+                  </div>
+                  {err && <p style={{ fontSize: 'var(--text-xs)', color: 'var(--coral)', margin: 0 }}>{err}</p>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                    <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm" onClick={() => { setShowNew(false); setErr(null) }}>Cancel</button>
+                    <button type="submit" className="ds-btn ds-btn--primary ds-btn--sm" disabled={saving}>
+                      {saving ? 'Creating…' : 'Create bucket'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Active buckets */}
+              {active.length === 0 && !showNew ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)', padding: '16px 0' }}>
+                  No active buckets. Create one to start saving.
+                </p>
+              ) : (
+                <div style={{ background: 'var(--bg-surface)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                  {active.map(b => (
+                    <BucketRow key={b.id} bucket={b} onRefresh={onRefresh} />
+                  ))}
+                </div>
+              )}
+
+              {/* Repayments */}
+              {repayments.length > 0 && (
+                <div>
+                  <p className="ds-label" style={{ marginBottom: 8 }}>Repayments</p>
+                  <div style={{ background: 'var(--bg-surface)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                    {repayments.map(b => (
+                      <BucketRow key={b.id} bucket={b} onRefresh={onRefresh} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Show completed toggle */}
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <button
+                  onClick={() => { setShowCompleted(v => !v); onRefresh(!showCompleted) }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', fontFamily: 'var(--font-sans)', fontWeight: 600, textDecoration: 'underline', padding: 0 }}
+                >
+                  {showCompleted ? 'Hide completed & dissolved' : 'Show completed & dissolved'}
+                </button>
+              </div>
+            </div>
+
+            <div className="ds-modal__footer">
+              <button className="ds-btn ds-btn--ghost" onClick={closeModal}>Close</button>
+              <button className="ds-btn ds-btn--outline ds-btn--sm" onClick={() => { setShowNew(v => !v); setErr(null) }}>
+                {showNew ? 'Cancel new' : '+ New bucket'}
+              </button>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: 120 }}>
-              <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>$</span>
-              <input className="ds-input" type="number" min="0" step="0.01" placeholder="Target amount" required
-                style={{ paddingLeft: 26, width: '100%' }}
-                value={form.targetAmount} onChange={e => setForm(f => ({ ...f, targetAmount: e.target.value }))}
-              />
-            </div>
-            <div style={{ position: 'relative', flex: 1, minWidth: 120 }}>
-              <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>$</span>
-              <input className="ds-input" type="number" min="0" step="0.01" placeholder="Monthly top-up"
-                style={{ paddingLeft: 26, width: '100%' }}
-                value={form.monthlyTopUp} onChange={e => setForm(f => ({ ...f, monthlyTopUp: e.target.value }))}
-              />
-            </div>
-            {form.type === 'Temporary' && (
-              <input className="ds-input" type="date" style={{ flex: 1, minWidth: 140 }}
-                value={form.targetDate} onChange={e => setForm(f => ({ ...f, targetDate: e.target.value }))}
-              />
-            )}
-          </div>
-          {err && <p style={{ fontSize: 'var(--text-xs)', color: 'var(--coral)', margin: 0 }}>{err}</p>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-            <button type="submit" className="ds-btn ds-btn--primary" disabled={saving}>
-              {saving ? 'Creating…' : 'Create bucket'}
-            </button>
-          </div>
-        </form>
+        </div>
       )}
-
-      {/* Active buckets */}
-      {loading && (
-        <p style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)' }}>Loading…</p>
-      )}
-
-      {!loading && active.length === 0 && !showNew && (
-        <p style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)' }}>
-          No active buckets. Create one to start saving.
-        </p>
-      )}
-
-      {!loading && active.map(b => (
-        <BucketRow key={b.id} bucket={b} onRefresh={onRefresh} />
-      ))}
-
-      {/* Repayments sub-section */}
-      {!loading && repayments.length > 0 && (
-        <>
-          <div style={{ padding: '12px 20px 8px', borderTop: '1.5px solid var(--border)' }}>
-            <span className="ds-label">Repayments</span>
-          </div>
-          {repayments.map(b => (
-            <BucketRow key={b.id} bucket={b} onRefresh={onRefresh} />
-          ))}
-        </>
-      )}
-
-      {/* Show completed toggle */}
-      <div style={{ padding: '12px 20px', borderTop: '1.5px solid var(--border)', display: 'flex', justifyContent: 'center' }}>
-        <button
-          onClick={() => { setShowCompleted(v => !v); onRefresh(!showCompleted ? true : false) }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', fontFamily: 'var(--font-sans)', fontWeight: 600, textDecoration: 'underline', padding: 0 }}
-        >
-          {showCompleted ? 'Hide completed & dissolved' : 'Show completed & dissolved'}
-        </button>
-      </div>
-    </div>
+    </>
   )
 }

@@ -13,6 +13,28 @@ function currentMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+// Contributions began from 2026-04; project forward from the last recorded entry
+const CPF_CONTRIBUTION_BASE = '2026-03'
+
+function monthsBetween(fromYM, toYM) {
+  const [fy, fm] = fromYM.split('-').map(Number)
+  const [ty, tm] = toYM.split('-').map(Number)
+  return (ty - fy) * 12 + (tm - fm)
+}
+
+function projectCpf(entry) {
+  if (!entry) return null
+  const now = new Date()
+  const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  if (entry.month >= cur) return { ...entry, projected: false, monthsProjected: 0 }
+  const base = entry.month > CPF_CONTRIBUTION_BASE ? entry.month : CPF_CONTRIBUTION_BASE
+  const n = Math.max(0, monthsBetween(base, cur))
+  const oa = entry.oa + CPF_MONTHLY.oa * n
+  const sa = entry.sa + CPF_MONTHLY.sa * n
+  const ma = entry.ma + CPF_MONTHLY.ma * n
+  return { ...entry, oa, sa, ma, total: oa + sa + ma, projected: n > 0, monthsProjected: n }
+}
+
 const ACCOUNTS = [
   { key: 'oa', label: 'OA', name: 'Ordinary',  monthly: CPF_MONTHLY.oa, bg: 'var(--green-light)',    color: '#1e5c1b', border: 'var(--green)'    },
   { key: 'sa', label: 'SA', name: 'Special',   monthly: CPF_MONTHLY.sa, bg: 'var(--lavender-light)', color: '#5a3e8a', border: 'var(--lavender)' },
@@ -65,6 +87,8 @@ export default function CPF() {
     }
   }
 
+  const projected = projectCpf(latest)
+
   return (
     <div className="ds-page">
 
@@ -87,12 +111,18 @@ export default function CPF() {
           color: 'var(--text-primary)',
           marginBottom: 'var(--space-2)',
         }}>
-          {loading ? '…' : fmtShort(latest?.total)}
+          {loading ? '…' : fmtShort(projected?.total)}
         </p>
 
-        <p className="ds-caption" style={{ marginBottom: 'var(--space-4)' }}>
+        <p className="ds-caption" style={{ marginBottom: projected?.projected ? 'var(--space-2)' : 'var(--space-4)' }}>
           as of {loading ? '…' : (latest?.month ?? '—')}
         </p>
+
+        {projected?.projected && (
+          <p className="ds-caption" style={{ marginBottom: 'var(--space-4)', color: '#7a5000', fontWeight: 600 }}>
+            Projected · includes {projected.monthsProjected} month{projected.monthsProjected !== 1 ? 's' : ''} of contributions
+          </p>
+        )}
 
         {/* CPF non-liquid pill */}
         <span style={{
@@ -119,7 +149,7 @@ export default function CPF() {
       </div>
 
       {/* ── Three Account Cards ────────────────────────────────────── */}
-      {!loading && latest && (
+      {!loading && projected && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
           {ACCOUNTS.map(({ key, label, name, monthly, bg, color, border }) => (
             <div key={key} style={{
@@ -135,7 +165,7 @@ export default function CPF() {
                 {name}
               </p>
               <p style={{ fontSize: 'var(--text-lg)', fontWeight: 800, letterSpacing: '-0.02em', color, lineHeight: 1.1, marginBottom: 'var(--space-2)' }}>
-                {fmt(latest[key])}
+                {fmt(projected[key])}
               </p>
               <span style={{
                 display: 'inline-flex', alignItems: 'center',

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { notion } from '../../notion.js'
+import { buildCatMap, buildCategoryProperty, resolveCat } from './transactions.js'
 
 const router = Router()
 const RECURRING_DB    = () => process.env.NOTION_RECURRING_DB
@@ -27,7 +28,7 @@ function currentMonthKey() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
-function mapRecurring(page) {
+function mapRecurring(page, catMap = new Map()) {
   const p = page.properties
   return {
     id:              page.id,
@@ -37,7 +38,7 @@ function mapRecurring(page) {
     yearlyMonth:     p.Month?.number ?? null,
     direction:       p.Direction?.select?.name ?? null,
     merchant:        p.Merchant?.rich_text[0]?.plain_text ?? '',
-    category:        p.Category?.select?.name ?? null,
+    category:        resolveCat(p.Category, catMap) ?? null,
     source:          p.Source?.select?.name ?? null,
     isPendingMatcha: p['Is Pending Matcha']?.checkbox ?? false,
     day:             p.Day?.number ?? null,
@@ -55,9 +56,10 @@ router.get('/recurring', async (req, res) => {
       database_id: RECURRING_DB(),
       sorts: [{ property: 'Name', direction: 'ascending' }],
     })
+    const catMap = await buildCatMap()
 
     const now  = currentMonthKey()
-    const all  = response.results.map(mapRecurring)
+    const all  = response.results.map(pg => mapRecurring(pg, catMap))
 
     // Auto-archive items whose activeUntil has passed
     const expired = all.filter(item => item.activeUntil && item.activeUntil < now)
@@ -86,7 +88,10 @@ router.post('/recurring', async (req, res) => {
     const { name, amount, frequency, yearlyMonth, direction = 'Expense', merchant, category, source, isPendingMatcha, day, notes, activeFrom, activeUntil } = req.body
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name is required' })
 
-    const schema = await getRecurringSchema()
+    const db = await notion.databases.retrieve({ database_id: RECURRING_DB() })
+    const schema = new Set(Object.keys(db.properties))
+    const schemaTypes = Object.fromEntries(Object.entries(db.properties).map(([k, v]) => [k, v.type]))
+    const catProps = category ? await buildCategoryProperty(category, schemaTypes) : {}
 
     const properties = {
       Name:      { title: [{ text: { content: name.trim() } }] },
@@ -96,7 +101,7 @@ router.post('/recurring', async (req, res) => {
       ...(schema.has('Notes')                                            ? { Notes:               { rich_text: notes ? [{ text: { content: notes } }] : [] } } : {}),
       ...(schema.has('Active')                                           ? { Active:              { checkbox: true } }                : {}),
       ...(schema.has('Merchant')          && merchant                   ? { Merchant:            { rich_text: [{ text: { content: merchant } }] } } : {}),
-      ...(schema.has('Category')          && category                   ? { Category:            { select: { name: category } } }    : {}),
+      ...(schema.has('Category')          && category                   ? catProps : {}),
       ...(schema.has('Source')            && source                     ? { Source:              { select: { name: source } } }      : {}),
       ...(schema.has('Is Pending Matcha')                                         ? { 'Is Pending Matcha': { checkbox: isPendingMatcha ?? false } }          : {}),
       ...(schema.has('Day')          && day != null && day !== ''                  ? { Day:           { number: parseInt(day, 10) } }                                                  : {}),
@@ -106,7 +111,8 @@ router.post('/recurring', async (req, res) => {
     }
 
     const page = await notion.pages.create({ parent: { database_id: RECURRING_DB() }, properties })
-    res.json({ success: true, data: mapRecurring(page) })
+    const catMap = await buildCatMap()
+    res.json({ success: true, data: mapRecurring(page, catMap) })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -127,8 +133,11 @@ router.delete('/recurring/:id', async (req, res) => {
 router.post('/recurring/:id/log', async (req, res) => {
   try {
     const recurringPage = await notion.pages.retrieve({ page_id: req.params.id })
-    const item   = mapRecurring(recurringPage)
+    const catMap = await buildCatMap()
+    const item   = mapRecurring(recurringPage, catMap)
     const schema = await getTxSchema()
+    const txDb = await notion.databases.retrieve({ database_id: TRANSACTIONS_DB() })
+    const schemaTypes = Object.fromEntries(Object.entries(txDb.properties).map(([k, v]) => [k, v.type]))
 
     const now = new Date()
     let year, month
@@ -155,7 +164,7 @@ router.post('/recurring/:id/log', async (req, res) => {
       'Auto Parsed':       { checkbox: false },
       'Needs Review':      { checkbox: item.amount === null },
       ...(schema.has('Merchant')    && item.merchant    ? { Merchant:    { rich_text: [{ text: { content: item.merchant } }] } } : {}),
-      ...(schema.has('Category')    && item.category    ? { Category:    { select: { name: item.category } } }    : {}),
+      ...(schema.has('Category')    && item.category    ? await buildCategoryProperty(item.category, schemaTypes) : {}),
       ...(schema.has('Source')      && item.source      ? { Source:      { select: { name: item.source } } }      : {}),
     }
 
@@ -171,7 +180,7 @@ router.post('/recurring/:id/log', async (req, res) => {
         date:           p.Date?.date?.start ?? null,
         amount:         p.Amount?.number ?? 0,
         direction:      p.Direction?.select?.name ?? null,
-        category:       p.Category?.select?.name ?? null,
+        category:       resolveCat(p.Category, catMap) ?? null,
         source:         p.Source?.select?.name ?? null,
         isPendingMatcha: p['Is Pending Matcha']?.checkbox ?? false,
         isBucketSpend:   p['Is Bucket Spend']?.checkbox ?? false,

@@ -79,7 +79,7 @@ export function parseTransactions(rawText) {
       .trim() || 'Unknown'
 
     const direction = INCOME_RE.test(line) ? 'Income' : 'Expense'
-    results.push({ merchant, amount, date, direction, category: '' })
+    results.push({ title: merchant, merchant, amount, date, direction, category: '' })
   }
 
   return results

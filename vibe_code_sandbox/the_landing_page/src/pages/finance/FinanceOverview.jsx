@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import CircularRing from '../../components/CircularRing.jsx'
 
 function toMonthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
@@ -10,6 +11,80 @@ function fmtMoney(n) {
 }
 
 const STATUS_PRIORITY = { Repaying: 0, Active: 1, Funded: 2, Spending: 3 }
+
+const CPF_MONTHLY_CONTRIB = { oa: 1495, sa: 390, ma: 520 }
+const CPF_CONTRIBUTION_BASE = '2026-03'
+
+function cpfMonthsBetween(fromYM, toYM) {
+  const [fy, fm] = fromYM.split('-').map(Number)
+  const [ty, tm] = toYM.split('-').map(Number)
+  return (ty - fy) * 12 + (tm - fm)
+}
+
+function projectCpf(entry) {
+  if (!entry) return null
+  const now = new Date()
+  const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  if (entry.month >= cur) return entry
+  const base = entry.month > CPF_CONTRIBUTION_BASE ? entry.month : CPF_CONTRIBUTION_BASE
+  const n = Math.max(0, cpfMonthsBetween(base, cur))
+  const oa = entry.oa + CPF_MONTHLY_CONTRIB.oa * n
+  const sa = entry.sa + CPF_MONTHLY_CONTRIB.sa * n
+  const ma = entry.ma + CPF_MONTHLY_CONTRIB.ma * n
+  return { ...entry, oa, sa, ma, total: oa + sa + ma }
+}
+
+function buildGrowthChartData({ cpfHistory, snapshots, fallbackCash, fallbackNetWorth, fallbackCpf, fallbackSavings }) {
+  const monthMap = new Map()
+
+  const cpfSorted = [...cpfHistory].sort((a, b) => a.month.localeCompare(b.month))
+  cpfSorted.forEach(e => {
+    monthMap.set(e.month, { ...monthMap.get(e.month), cpf: e.oa + e.sa + e.ma })
+  })
+
+  const now = new Date()
+  const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const lastCpf = cpfSorted[cpfSorted.length - 1]
+  if (lastCpf && lastCpf.month < cur) {
+    const base = lastCpf.month > CPF_CONTRIBUTION_BASE ? lastCpf.month : CPF_CONTRIBUTION_BASE
+    const n = Math.max(0, cpfMonthsBetween(base, cur))
+    if (n > 0) {
+      monthMap.set(cur, {
+        ...monthMap.get(cur),
+        cpf: (lastCpf.oa + CPF_MONTHLY_CONTRIB.oa * n) +
+             (lastCpf.sa + CPF_MONTHLY_CONTRIB.sa * n) +
+             (lastCpf.ma + CPF_MONTHLY_CONTRIB.ma * n),
+        projected: true,
+      })
+    }
+  }
+
+  snapshots.forEach(s => {
+    const existing = monthMap.get(s.month) || {}
+    monthMap.set(s.month, {
+      ...existing,
+      cash: s.cash,
+      savings: s.savings ?? s.cash,
+      netWorth: s.netWorth,
+      cpf: existing.cpf ?? s.cpf,
+    })
+  })
+
+  for (const [month, point] of monthMap.entries()) {
+    if (point.cash == null || point.netWorth == null) {
+      const cpf = point.cpf ?? fallbackCpf
+      monthMap.set(month, {
+        ...point,
+        cpf,
+        cash: point.cash ?? fallbackCash,
+        savings: point.savings ?? fallbackSavings,
+        netWorth: point.netWorth ?? (fallbackNetWorth - fallbackCpf + cpf),
+      })
+    }
+  }
+
+  return [...monthMap.keys()].sort().slice(-12).map(m => ({ month: m, ...monthMap.get(m) }))
+}
 
 function isLiabilityAccount(account) {
   if (account.role) return account.role === 'liability'
@@ -22,30 +97,82 @@ function isCashAccount(account) {
   return /checking|savings|cash/.test(value)
 }
 
-// ── Circular progress ring ────────────────────────────────────────
-function CircularRing({ percent, size = 44, stroke = 5, color = 'var(--green)', label }) {
-  const pct = Math.min(Math.max(percent, 0), 100)
-  const r = (size - stroke) / 2
-  const circ = 2 * Math.PI * r
-  const offset = circ - (pct / 100) * circ
+// ── Growth line chart ─────────────────────────────────────────────
+
+const CHART_LINES = [
+  { key: 'netWorth', color: 'var(--green)',    label: 'Net worth' },
+  { key: 'savings',  color: 'var(--lavender)', label: 'Savings'   },
+  { key: 'cpf',      color: 'var(--sky)',      label: 'CPF'       },
+]
+
+function GrowthChart({ data }) {
+  if (!data || data.length < 2) return null
+
+  const VW = 400, VH = 160
+  const pad = { t: 8, r: 12, b: 28, l: 12 }
+  const cw = VW - pad.l - pad.r
+  const ch = VH - pad.t - pad.b
+
+  const allVals = data.flatMap(d => CHART_LINES.map(l => d[l.key]).filter(v => v != null))
+  if (!allVals.length) return null
+  const min = Math.min(...allVals)
+  const max = Math.max(...allVals)
+  const range = max - min || 1
+
+  const xOf = i => (pad.l + (i / Math.max(data.length - 1, 1)) * cw).toFixed(1)
+  const yOf = v => (pad.t + (1 - (v - min) / range) * ch).toFixed(1)
+
+  function buildPath(key) {
+    let d = '', pen = false
+    data.forEach((pt, i) => {
+      if (pt[key] == null) { pen = false; return }
+      d += pen ? ` L${xOf(i)},${yOf(pt[key])}` : `M${xOf(i)},${yOf(pt[key])}`
+      pen = true
+    })
+    return d
+  }
+
+  const n = data.length
+  const labelIdxs = n <= 6 ? data.map((_, i) => i) : [0, Math.round(n / 3), Math.round(2 * n / 3), n - 1]
+
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} style={{ display: 'block', transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg-sunken)" strokeWidth={stroke} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={circ} strokeDashoffset={offset}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 500ms ease' }}
-        />
+    <div>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 10, flexWrap: 'wrap' }}>
+        {CHART_LINES.map(({ key, color, label }) => (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 600 }}>
+            <div style={{ width: 18, height: 2.5, background: color, borderRadius: 2 }} />
+            {label}
+          </div>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${VW} ${VH}`} style={{ width: '100%', height: 'auto' }}>
+        {CHART_LINES.map(({ key, color }) => {
+          const path = buildPath(key)
+          return path ? (
+            <path key={key} d={path} fill="none" stroke={color} strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" />
+          ) : null
+        })}
+        {CHART_LINES.map(({ key, color }) =>
+          data.map((pt, i) => pt[key] != null ? (
+            <circle key={`${key}-${i}`} cx={xOf(i)} cy={yOf(pt[key])} r="2.5"
+              fill={pt.projected ? 'var(--bg-surface)' : color}
+              stroke={pt.projected ? color : 'none'} strokeWidth="1.5"
+            />
+          ) : null)
+        )}
+        {labelIdxs.map(i => {
+          const [yr, mo] = data[i].month.split('-').map(Number)
+          const label = new Date(yr, mo - 1, 1).toLocaleDateString('en-SG', { month: 'short', year: '2-digit' })
+          const anchor = i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'
+          return (
+            <text key={i} x={xOf(i)} y={VH - 2} textAnchor={anchor}
+              fontSize="10" fill="var(--text-tertiary)" fontFamily="inherit">
+              {label}
+            </text>
+          )
+        })}
       </svg>
-      {label !== undefined && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: size < 48 ? 9 : 11, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em',
-        }}>
-          {label}
-        </div>
-      )}
     </div>
   )
 }
@@ -82,6 +209,8 @@ export default function FinanceOverview() {
 
   const [accounts,      setAccounts]      = useState([])
   const [cpf,           setCpf]           = useState(null)
+  const [cpfHistory,    setCpfHistory]    = useState([])
+  const [snapshots,     setSnapshots]     = useState([])
   const [budgetSummary, setBudgetSummary] = useState([])
   const [income,        setIncome]        = useState(0)
   const [buckets,       setBuckets]       = useState([])
@@ -96,20 +225,70 @@ export default function FinanceOverview() {
     async function load() {
       setLoading(true)
       try {
-        const [r1, r2, r3, r4, r5] = await Promise.all([
+        const [r1, r2, r3, r4, r5, r6, r7] = await Promise.all([
           fetch('/api/finance/accounts'),
           fetch('/api/finance/cpf/latest'),
           fetch(`/api/finance/budgets/summary?month=${month}`),
           fetch('/api/finance/buckets'),
           fetch('/api/finance/payback'),
+          fetch('/api/finance/cpf'),
+          fetch('/api/finance/snapshots'),
         ])
-        const [a, c, b, bk, pb] = await Promise.all([r1.json(), r2.json(), r3.json(), r4.json(), r5.json()])
+        const [a, c, b, bk, pb, ch, sn] = await Promise.all([r1.json(), r2.json(), r3.json(), r4.json(), r5.json(), r6.json(), r7.json()])
         if (cancelled) return
         if (a.success)  setAccounts(a.data)
         if (c.success)  setCpf(c.data)
         if (b.success)  { setBudgetSummary(b.data); setIncome(b.income ?? 0) }
         if (bk.success) setBuckets(bk.data)
         if (pb.success) setPaybackTotal(pb.data.reduce((s, i) => s + i.remaining, 0))
+        if (ch.success) setCpfHistory(ch.data)
+        if (sn.success) setSnapshots(sn.data)
+
+        // Auto-save current month snapshot (fire-and-forget)
+        if (a.success && c.success) {
+          const accs    = a.data
+          const cash    = accs.filter(x => x.role !== 'liability').reduce((s, x) => s + x.balance, 0)
+          const liab    = accs.filter(x => x.role === 'liability').reduce((s, x) => s + x.balance, 0)
+          const pbAmt   = pb.success ? pb.data.reduce((s, i) => s + i.remaining, 0) : 0
+          const cpfProj = projectCpf(c.data)
+          const cpfAmt  = cpfProj ? cpfProj.oa + cpfProj.sa + cpfProj.ma : 0
+          const currentSpent = b.success ? b.data.reduce((s, item) => s + (item.spent ?? 0), 0) : 0
+          const currentBucketCommitments = bk.success
+            ? bk.data
+                .filter(bucket => bucket.status === 'Active' || bucket.status === 'Funded')
+                .reduce((s, bucket) => s + (bucket.type === 'Repayment' ? (bucket.monthlyRepayment || 0) : (bucket.monthlyTopUp || 0)), 0)
+            : 0
+          const currentMonthlySavings = (b.success ? (b.income ?? 0) : 0) - currentSpent - currentBucketCommitments
+          const currentSavingsTotal = cash + currentMonthlySavings
+          const currentNetWorth = currentSavingsTotal + cpfAmt - liab - pbAmt
+
+          if (ch.success && sn.success) {
+            const growthSeries = buildGrowthChartData({
+              cpfHistory: ch.data,
+              snapshots: sn.data,
+              fallbackCash: cash,
+              fallbackNetWorth: currentNetWorth,
+              fallbackCpf: cpfAmt,
+              fallbackSavings: currentSavingsTotal,
+            })
+            const existingMonths = new Set(sn.data.map(s => s.month))
+            growthSeries
+              .filter(point => point.month !== month && !existingMonths.has(point.month) && point.cash != null && point.netWorth != null)
+              .forEach(point => {
+                fetch('/api/finance/snapshots', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ month: point.month, cash: point.cash, savings: point.savings, cpf: point.cpf, netWorth: point.netWorth }),
+                }).catch(() => {})
+              })
+          }
+
+          fetch('/api/finance/snapshots', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ month, cash, savings: currentSavingsTotal, cpf: cpfAmt, netWorth: currentNetWorth }),
+          }).catch(() => {})
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -140,14 +319,29 @@ export default function FinanceOverview() {
   const liabilityTotal    = liabilityAccounts.reduce((s, a) => s + a.balance, 0)
   const cashTotal         = assetTotal   // all non-liability accounts
   const savingsAccounts   = assetAccounts
-  const cpfTotal         = cpf ? (cpf.oa + cpf.sa + cpf.ma) : 0
-  const netWorth         = assetTotal - liabilityTotal + cpfTotal - paybackTotal
+  const projectedCpf     = projectCpf(cpf)
+  const cpfTotal         = projectedCpf ? (projectedCpf.oa + projectedCpf.sa + projectedCpf.ma) : 0
 
   const totalLimit   = budgetSummary.reduce((s, b) => s + b.monthlyLimit, 0)
   const totalSpent   = budgetSummary.reduce((s, b) => s + b.spent, 0)
   const totalPercent = totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0
   const net          = income - totalSpent
   const spendStatus  = totalSpent > totalLimit ? 'over' : totalPercent >= 80 ? 'warning' : 'ok'
+  const totalBucketCommitments = buckets
+    .filter(b => b.status === 'Active' || b.status === 'Funded')
+    .reduce((s, b) => s + (b.type === 'Repayment' ? (b.monthlyRepayment || 0) : (b.monthlyTopUp || 0)), 0)
+  const monthlySavings = income - totalSpent - totalBucketCommitments
+  const totalSavings = cashTotal + monthlySavings
+  const netWorth = totalSavings + cpfTotal - liabilityTotal - paybackTotal
+
+  const growthChartData = buildGrowthChartData({
+    cpfHistory,
+    snapshots,
+    fallbackCash: cashTotal,
+    fallbackNetWorth: netWorth,
+    fallbackCpf: cpfTotal,
+    fallbackSavings: totalSavings,
+  })
 
   const daysInMonth = new Date(y, m, 0).getDate()
   const daysLeft    = daysInMonth - today.getDate()
@@ -214,7 +408,7 @@ export default function FinanceOverview() {
           <p className="ds-label" style={{ color: '#5B3D7A', marginBottom: 10 }}>Savings</p>
           <div style={{ marginBottom: 10 }}>
             <span style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-0.04em', color: 'var(--text-primary)', lineHeight: 1 }}>
-              {fmtMoney(cashTotal)}
+              {fmtMoney(totalSavings)}
             </span>
           </div>
           <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: '#5B3D7A', fontWeight: 600 }}>
@@ -263,6 +457,13 @@ export default function FinanceOverview() {
           </div>
         )}
       </div>
+
+      {/* ── Growth Chart ── */}
+      {growthChartData.length >= 2 && (
+        <Section title="Growth">
+          <GrowthChart data={growthChartData} />
+        </Section>
+      )}
 
       {/* ── ALERTS ── */}
       {topAlerts.length > 0 && (

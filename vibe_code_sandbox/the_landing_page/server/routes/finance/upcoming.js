@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { notion } from '../../notion.js'
+import { buildCategoryProperty } from './transactions.js'
 
 const router = Router()
 const UPCOMING_DB  = () => process.env.NOTION_UPCOMING_DB
@@ -136,13 +137,16 @@ router.post('/upcoming', async (req, res) => {
     const { name, estimatedAmount, dueDate, category, repeatYearly } = req.body
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name is required' })
 
+    const db = await notion.databases.retrieve({ database_id: UPCOMING_DB() })
+    const schemaTypes = Object.fromEntries(Object.entries(db.properties).map(([k, v]) => [k, v.type]))
+
     const page = await notion.pages.create({
       parent: { database_id: UPCOMING_DB() },
       properties: {
         Name:              { title: [{ text: { content: name.trim() } }] },
         ...(estimatedAmount != null ? { 'Estimated Amount': { number: parseFloat(estimatedAmount) || 0 } } : {}),
         ...(dueDate                 ? { 'Due Date':         { date: { start: dueDate } } } : {}),
-        ...(category                ? { Category:           { select: { name: category } } } : {}),
+        ...(category                ? await buildCategoryProperty(category, schemaTypes) : {}),
         'Repeat Yearly':   { checkbox: repeatYearly ?? false },
       },
     })

@@ -50,6 +50,7 @@ async function getReductionOverrides(month) {
   if (!PLANS_DB() || !LINES_DB()) return {}
   try {
     const monthStart = `${month}-01`
+    const catMap = await buildCatMap()
     const plans = await queryAll(PLANS_DB(), {
       and: [
         { property: 'Status',      select: { equals: 'Active'           } },
@@ -65,7 +66,7 @@ async function getReductionOverrides(month) {
       })
       for (const line of lines) {
         const p   = line.properties
-        const cat = p.Category?.select?.name?.toLowerCase()
+        const cat = resolveCat(p.Category, catMap)?.toLowerCase()
         const lim = p['Reduced Limit']?.number ?? 0
         if (cat) overrides[cat] = lim
       }
@@ -75,16 +76,24 @@ async function getReductionOverrides(month) {
 }
 
 async function getBudgetRows(catMap) {
-  // Try rows explicitly marked as 'default'
+  let hasMonthField = false
   try {
-    const defaults = await queryAll(BUDGETS_DB(), {
-      and: [
-        { property: 'Active', checkbox:  { equals: true      } },
-        { property: 'Month',  rich_text: { equals: 'default' } },
-      ],
-    })
-    if (defaults.length > 0) return defaults.map(pg => mapBudget(pg, catMap))
+    const db = await notion.databases.retrieve({ database_id: BUDGETS_DB() })
+    hasMonthField = Boolean(db.properties?.Month)
   } catch {}
+
+  // Try rows explicitly marked as 'default'
+  if (hasMonthField) {
+    try {
+      const defaults = await queryAll(BUDGETS_DB(), {
+        and: [
+          { property: 'Active', checkbox:  { equals: true      } },
+          { property: 'Month',  rich_text: { equals: 'default' } },
+        ],
+      })
+      if (defaults.length > 0) return defaults.map(pg => mapBudget(pg, catMap))
+    } catch {}
+  }
 
   // Fallback: all active rows (pre-migration DBs without Month field)
   const all = await queryAll(BUDGETS_DB(), {
