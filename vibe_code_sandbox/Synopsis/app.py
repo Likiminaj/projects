@@ -12,12 +12,16 @@ Routes:
 import io
 import os
 
+from dotenv import load_dotenv
+load_dotenv()  # reads .env into os.environ before anything else imports
+
 import pandas as pd
 from flask import Flask, Response, jsonify, render_template, request
 
 from analysis.sentiment import add_sentiment_columns
 from analysis.synthesizer import build_quote_bank, build_report, build_summary_stats
 from analysis.thematic_coder import run_thematic_analysis
+from analysis.semantic_clusterer import run_semantic_clustering
 from utils.reddit_fetcher import fetch_all_threads
 
 # ---------------------------------------------------------------------------
@@ -112,9 +116,13 @@ def process():
     quote_bank = build_quote_bank(df)
     report = build_report(df, stats, quote_bank)
 
-    # ---- Thematic coding (Claude-powered) ---------------------------------
+    # ---- Thematic coding (Claude-powered, keyword-free) -------------------
     theme_analysis = run_thematic_analysis(df)
     comment_themes = theme_analysis.get("comment_themes", {})
+
+    # ---- Semantic clustering (embeddings + HDBSCAN + LLM labels) ----------
+    cluster_result = run_semantic_clustering(df)
+    comment_clusters = cluster_result.get("comment_clusters", {})
 
     # Convert DataFrame to a list of dicts for the JSON response.
     # We coerce types so pandas booleans / numpy types serialise cleanly.
@@ -124,12 +132,18 @@ def process():
         "potential_redundancy": bool,
     }).to_dict(orient="records")
 
-    # Attach per-comment theme data
+    # Attach per-comment theme + cluster data
     for comment in comments_json:
         cid = comment["comment_id"]
+
         coding = comment_themes.get(cid, {})
         comment["themes"] = coding.get("themes", [])
         comment["primary_theme"] = coding.get("primary_theme", None)
+
+        cluster = comment_clusters.get(cid, {})
+        comment["cluster_id"] = cluster.get("cluster_id", -1)
+        comment["cluster_similarity"] = cluster.get("similarity", 0.0)
+        comment["cluster_theme"] = cluster.get("primary_theme", None)
 
     return jsonify({
         "comments": comments_json,
@@ -137,6 +151,10 @@ def process():
         "report": report,
         "quote_bank": quote_bank,
         "theme_analysis": theme_analysis,
+        "semantic_clusters": {
+            "themes": cluster_result.get("themes", {}),
+            "noise_count": cluster_result.get("noise_count", 0),
+        },
         "errors": fetch_errors,
     })
 

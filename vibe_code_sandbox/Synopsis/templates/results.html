@@ -119,6 +119,18 @@
       </div>
     </section>
 
+    <!-- Semantic Clusters -->
+    <section class="card" id="semantic-cluster-card" style="display:none">
+      <div class="cluster-section-header">
+        <div>
+          <p class="section-label">Semantic Clusters</p>
+          <p id="cluster-meta" class="sub-label" style="margin-top:-12px; margin-bottom:18px;"></p>
+        </div>
+        <button class="btn-ghost btn-sm" id="cluster-clear-btn" style="display:none" onclick="clearClusterFilter()">Clear filter ✕</button>
+      </div>
+      <div id="cluster-grid"></div>
+    </section>
+
     <!-- Theme Analysis -->
     <section class="card" id="theme-analysis-card" style="display:none">
       <p class="section-label">Thematic Analysis</p>
@@ -138,6 +150,7 @@
           <button class="btn-ghost btn-sm" onclick="handleExport()">Download CSV</button>
         </div>
       </div>
+      <div id="cluster-filter-bar" class="cluster-filter-bar" style="display:none"></div>
       <p id="comment-count-label" class="sub-label"></p>
       <div class="tbl-wrap">
         <table>
@@ -152,6 +165,7 @@
               <th>Date</th>
               <th>Score</th>
               <th>Sentiment</th>
+              <th>Cluster</th>
               <th>Flag</th>
             </tr>
           </thead>

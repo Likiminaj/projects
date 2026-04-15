@@ -15,6 +15,7 @@ let allComments = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
 let hideRedundant = false;
+let activeClusterFilter = null;   // null = show all clusters
 
 // -------------------------------------------------------------------------
 // Page detection
@@ -103,9 +104,10 @@ function initResultsPage() {
   currentPage = 1;
 
   renderStats(data.stats);
-  renderTable();
   renderQuoteBank(data.quote_bank);
+  renderSemanticClusters(data.semantic_clusters);
   renderThemeAnalysis(data.theme_analysis);
+  renderTable();
 
   if (data.errors && data.errors.length > 0) {
     // Surface any per-thread errors as a banner
@@ -183,9 +185,9 @@ function renderTable() {
   const tbody = document.getElementById("comment-tbody");
   tbody.innerHTML = "";
 
-  const filtered = hideRedundant
-    ? allComments.filter((c) => !c.potential_redundancy)
-    : allComments;
+  let filtered = allComments;
+  if (hideRedundant) filtered = filtered.filter((c) => !c.potential_redundancy);
+  if (activeClusterFilter !== null) filtered = filtered.filter((c) => c.cluster_id === activeClusterFilter);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   currentPage = Math.min(currentPage, totalPages);
@@ -195,6 +197,10 @@ function renderTable() {
   pageComments.forEach((c) => {
     const tr = document.createElement("tr");
     if (c.potential_redundancy) tr.classList.add("redundant");
+
+    const clusterCell = c.cluster_id != null && c.cluster_id !== -1
+      ? `<span class="badge badge-cluster">${escHtml(c.cluster_theme || "Cluster " + c.cluster_id)}</span>`
+      : `<span class="badge badge-outlier">outlier</span>`;
 
     tr.innerHTML = `
       <td class="cell-thread">${escHtml(c.thread_title)}</td>
@@ -206,6 +212,7 @@ function renderTable() {
       <td>${escHtml(c.created_utc)}</td>
       <td>${c.sentiment_score.toFixed(3)}</td>
       <td><span class="badge badge-${c.sentiment_label}">${c.sentiment_label}</span></td>
+      <td>${clusterCell}</td>
       <td>${c.potential_redundancy ? '<span class="badge badge-flag">flagged</span>' : "—"}</td>
     `;
     buildAccordion(tr.querySelector(".cell-body-full"), c.comment_body);
@@ -214,9 +221,14 @@ function renderTable() {
 
   renderPagination(totalPages, filtered.length);
 
-  const label = hideRedundant
-    ? `Showing ${filtered.length.toLocaleString()} of ${allComments.length.toLocaleString()} comments (redundant hidden)`
-    : `Showing all ${allComments.length.toLocaleString()} comments`;
+  let label = "";
+  if (activeClusterFilter !== null) {
+    label = `Showing ${filtered.length.toLocaleString()} comment${filtered.length !== 1 ? "s" : ""} in this cluster`;
+  } else if (hideRedundant) {
+    label = `Showing ${filtered.length.toLocaleString()} of ${allComments.length.toLocaleString()} comments (flagged hidden)`;
+  } else {
+    label = `Showing all ${allComments.length.toLocaleString()} comments`;
+  }
   setText("comment-count-label", label);
 }
 
@@ -358,6 +370,134 @@ function switchTab(tabId) {
     panel.classList.toggle("active", panel.id === "tab-" + tabId);
   });
 }
+
+// -------------------------------------------------------------------------
+// Render: Semantic Clusters
+// -------------------------------------------------------------------------
+
+// Central function — every cluster selection goes through here so cards,
+// filter pills, and the clear button always stay in sync.
+function setActiveCluster(clusterId) {
+  activeClusterFilter = clusterId;
+
+  // Sync cluster cards
+  document.querySelectorAll(".cluster-card").forEach((c) => {
+    c.classList.toggle("selected", parseInt(c.dataset.clusterId, 10) === clusterId);
+  });
+
+  // Sync filter pills
+  document.querySelectorAll(".cluster-filter-pill").forEach((p) => {
+    const val = p.dataset.clusterId === "all" ? null : parseInt(p.dataset.clusterId, 10);
+    p.classList.toggle("active", val === clusterId);
+  });
+
+  // Show/hide the clear button in the cluster section header
+  const clearBtn = document.getElementById("cluster-clear-btn");
+  if (clearBtn) clearBtn.style.display = clusterId !== null ? "inline-flex" : "none";
+
+  currentPage = 1;
+  renderTable();
+}
+
+function renderSemanticClusters(clusterData) {
+  const card   = document.getElementById("semantic-cluster-card");
+  const grid   = document.getElementById("cluster-grid");
+  const metaEl = document.getElementById("cluster-meta");
+  grid.innerHTML = "";
+
+  const themes = clusterData && clusterData.themes ? clusterData.themes : {};
+  const themeCount = Object.keys(themes).length;
+
+  if (themeCount === 0) {
+    card.style.display = "none";
+    return;
+  }
+
+  const noiseCount = clusterData.noise_count || 0;
+  metaEl.textContent =
+    `${themeCount} cluster${themeCount !== 1 ? "s" : ""} found · ${noiseCount} outlier${noiseCount !== 1 ? "s" : ""} · click a card to filter the table`;
+  card.style.display = "block";
+
+  // Sort by size descending so biggest themes come first
+  const sorted = Object.entries(themes).sort((a, b) => b[1].size - a[1].size);
+
+  sorted.forEach(([id, t]) => {
+    const clusterId = parseInt(id, 10);
+    const el = document.createElement("div");
+    el.className = "cluster-card";
+    el.dataset.clusterId = id;
+
+    const quotes = (t.representative_comments || []).slice(0, 3)
+      .map((q) => `<li>${escHtml(q.length > 220 ? q.slice(0, 220) + "…" : q)}</li>`)
+      .join("");
+
+    const signalClass = { strong: "badge-positive", moderate: "badge-neutral", emerging: "badge-flag" }[t.signal_strength] || "";
+    const insightRows = [
+      t.research_takeaway   && `<div class="cluster-insight-row"><strong>Research takeaway</strong><span>${escHtml(t.research_takeaway)}</span></div>`,
+      t.product_implication && `<div class="cluster-insight-row"><strong>Product implication</strong><span>${escHtml(t.product_implication)}</span></div>`,
+    ].filter(Boolean).join("");
+
+    el.innerHTML = `
+      <div class="cluster-card-header">
+        <span class="cluster-label">${escHtml(t.theme_name || "Cluster " + id)}</span>
+        <div class="cluster-card-badges">
+          ${t.signal_strength ? `<span class="badge ${signalClass}">${escHtml(t.signal_strength)}</span>` : ""}
+          <span class="cluster-size-badge">${t.size} comment${t.size !== 1 ? "s" : ""}</span>
+        </div>
+      </div>
+      ${t.theme_description ? `<p class="cluster-description">${escHtml(t.theme_description)}</p>` : ""}
+      ${insightRows ? `<div class="cluster-insights">${insightRows}</div>` : ""}
+      ${quotes ? `<ul class="cluster-quotes">${quotes}</ul>` : ""}
+    `;
+
+    el.addEventListener("click", () => {
+      const next = activeClusterFilter === clusterId ? null : clusterId;
+      setActiveCluster(next);
+      if (next !== null) {
+        document.querySelector(".table-card").scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+
+    grid.appendChild(el);
+  });
+
+  // Build the filter bar inside the comment table
+  buildClusterFilterBar(sorted);
+}
+
+function buildClusterFilterBar(sorted) {
+  const bar = document.getElementById("cluster-filter-bar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  bar.style.display = "flex";
+
+  // "All" pill
+  const allPill = document.createElement("button");
+  allPill.className = "cluster-filter-pill active";
+  allPill.dataset.clusterId = "all";
+  allPill.textContent = "All";
+  allPill.addEventListener("click", () => setActiveCluster(null));
+  bar.appendChild(allPill);
+
+  // One pill per cluster
+  sorted.forEach(([id, t]) => {
+    const clusterId = parseInt(id, 10);
+    const pill = document.createElement("button");
+    pill.className = "cluster-filter-pill";
+    pill.dataset.clusterId = id;
+    pill.textContent = t.theme_name || "Cluster " + id;
+    pill.addEventListener("click", () => {
+      const next = activeClusterFilter === clusterId ? null : clusterId;
+      setActiveCluster(next);
+    });
+    bar.appendChild(pill);
+  });
+}
+
+function clearClusterFilter() {
+  setActiveCluster(null);
+}
+window.clearClusterFilter = clearClusterFilter;
 
 // -------------------------------------------------------------------------
 // Render: Theme badges
