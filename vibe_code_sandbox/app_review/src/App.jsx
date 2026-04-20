@@ -11,6 +11,30 @@ const PLATFORM_LABELS = { ios: 'App Store', android: 'Google Play' }
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
+function triggerDownload(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadAggregationCSV(data, filename) {
+  const cols = ['period', 'review_count', 'avg_rating', 'avg_sentiment', 'positive_count', 'neutral_count', 'negative_count']
+  const lines = [cols.join(','), ...data.map(r => cols.map(c => r[c] ?? '').join(','))]
+  triggerDownload(lines.join('\n'), filename, 'text/csv')
+}
+
+function downloadReviewsCSV(reviews, filename) {
+  const cols = ['date', 'platform', 'rating', 'sentiment_label', 'sentiment_score', 'version', 'review_text']
+  const escape = v => {
+    const s = String(v ?? '')
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const lines = [cols.join(','), ...reviews.map(r => cols.map(c => escape(r[c])).join(','))]
+  triggerDownload(lines.join('\n'), filename, 'text/csv')
+}
+
 async function safeJson(res, fallback) {
   const text = await res.text()
   if (!text) throw new Error(fallback + ' (server returned empty response — is it running?)')
@@ -215,8 +239,15 @@ function SentimentDistribution({ reviews }) {
   )
 }
 
-function ReviewTable({ reviews }) {
+function ReviewTable({ reviews, filename = 'reviews.csv' }) {
   return (
+    <div>
+      <div className="section-row" style={{ marginBottom: 12 }}>
+        <span />
+        <Button variant="ghost" size="sm" onClick={() => downloadReviewsCSV(reviews, filename)}>
+          Download CSV
+        </Button>
+      </div>
     <div className="table-wrap">
       <table>
         <thead>
@@ -256,11 +287,19 @@ function ReviewTable({ reviews }) {
         </tbody>
       </table>
     </div>
+    </div>
   )
 }
 
-function AggregationTable({ data }) {
+function AggregationTable({ data, filename = 'aggregation.csv' }) {
   return (
+    <div>
+      <div className="section-row">
+        <p className="chart-label">Monthly breakdown</p>
+        <Button variant="ghost" size="sm" onClick={() => downloadAggregationCSV(data, filename)}>
+          Download CSV
+        </Button>
+      </div>
     <div className="table-wrap">
       <table>
         <thead>
@@ -291,6 +330,7 @@ function AggregationTable({ data }) {
           })}
         </tbody>
       </table>
+    </div>
     </div>
   )
 }
@@ -536,11 +576,14 @@ export default function App() {
                 <SentimentTrendChart
                   ios={analysisData.byPlatform.ios?.aggregation}
                   android={analysisData.byPlatform.android?.aggregation}
+                  filename={`${analysisData.apps.map(a => a.name).filter((v,i,a)=>a.indexOf(v)===i).join('-')}-sentiment.png`}
                 />
                 {analysisData.aggregation.length > 0 && (
                   <div className="mt-md">
-                    <p className="chart-label">Monthly breakdown</p>
-                    <AggregationTable data={analysisData.aggregation} />
+                    <AggregationTable
+                      data={analysisData.aggregation}
+                      filename={`${analysisData.apps.map(a => a.name).filter((v,i,a)=>a.indexOf(v)===i).join('-')}-monthly.csv`}
+                    />
                   </div>
                 )}
               </Card>
@@ -551,7 +594,10 @@ export default function App() {
                   title={`All ${analysisData.reviews.length} reviews`}
                   subtitle="Cleaned, deduplicated, and sentiment-scored."
                 />
-                <ReviewTable reviews={analysisData.reviews} />
+                <ReviewTable
+                  reviews={analysisData.reviews}
+                  filename={`${analysisData.apps.map(a => a.name).filter((v,i,a)=>a.indexOf(v)===i).join('-')}-reviews.csv`}
+                />
               </Card>
             </>
           )}

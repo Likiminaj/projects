@@ -1,9 +1,50 @@
+import { useRef } from 'react'
 import {
   LineChart, Line, BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { Note } from './ui.jsx'
+import { Note, Button } from './ui.jsx'
+
+async function downloadChartAsPng(containerEl, filename = 'chart.png') {
+  const svgs = Array.from(containerEl.querySelectorAll('svg'))
+  if (!svgs.length) return
+
+  const rects   = svgs.map(s => s.getBoundingClientRect())
+  const width   = Math.max(...rects.map(r => r.width))
+  const height  = rects.reduce((h, r) => h + r.height, 0)
+  const dpr     = window.devicePixelRatio || 1
+  const canvas  = document.createElement('canvas')
+  canvas.width  = width  * dpr
+  canvas.height = height * dpr
+  const ctx = canvas.getContext('2d')
+  ctx.scale(dpr, dpr)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, width, height)
+
+  let offsetY = 0
+  for (let i = 0; i < svgs.length; i++) {
+    const svg  = svgs[i]
+    const rect = rects[i]
+    const clone = svg.cloneNode(true)
+    clone.setAttribute('width',  rect.width)
+    clone.setAttribute('height', rect.height)
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    await new Promise((resolve, reject) => {
+      const img  = new Image()
+      img.onload = () => { ctx.drawImage(img, 0, offsetY, rect.width, rect.height); URL.revokeObjectURL(url); resolve() }
+      img.onerror = reject
+      img.src = url
+    })
+    offsetY += rect.height
+  }
+
+  const a = document.createElement('a')
+  a.href = canvas.toDataURL('image/png')
+  a.download = filename
+  a.click()
+}
 
 const IOS_COLOR     = '#2563EB'
 const ANDROID_COLOR = '#16A34A'
@@ -84,7 +125,8 @@ const axisProps = {
   tickLine: false,
 }
 
-export function SentimentTrendChart({ ios, android }) {
+export function SentimentTrendChart({ ios, android, filename = 'sentiment-chart.png' }) {
+  const chartRef   = useRef(null)
   const hasIos     = ios?.length     > 0
   const hasAndroid = android?.length > 0
 
@@ -101,11 +143,16 @@ export function SentimentTrendChart({ ios, android }) {
   if (both) {
     const merged = mergeTimeSeries(ios, android)
     return (
-      <div>
-        <Legend platforms={[
-          { label: 'App Store',   color: IOS_COLOR },
-          { label: 'Google Play', color: ANDROID_COLOR },
-        ]} />
+      <div ref={chartRef}>
+        <div className="section-row">
+          <Legend platforms={[
+            { label: 'App Store',   color: IOS_COLOR },
+            { label: 'Google Play', color: ANDROID_COLOR },
+          ]} />
+          <Button variant="ghost" size="sm" onClick={() => downloadChartAsPng(chartRef.current, filename)}>
+            Download PNG
+          </Button>
+        </div>
 
         <div className="chart-outer">
           <p className="chart-label">Avg sentiment over time</p>
@@ -154,7 +201,13 @@ export function SentimentTrendChart({ ios, android }) {
   const color = hasIos ? IOS_COLOR : ANDROID_COLOR
 
   return (
-    <div>
+    <div ref={chartRef}>
+      <div className="section-row">
+        <span />
+        <Button variant="ghost" size="sm" onClick={() => downloadChartAsPng(chartRef.current, filename)}>
+          Download PNG
+        </Button>
+      </div>
       <div className="chart-outer">
         <p className="chart-label">Avg sentiment over time</p>
         <ResponsiveContainer width="100%" height={200}>
