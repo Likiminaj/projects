@@ -1,6 +1,6 @@
 /**
  * setup-categories.js
- * Creates the Categories and Subcategories Notion databases and seeds defaults.
+ * Creates the Category Notion database and seeds defaults.
  * Run once after initial setup.
  * Usage: node scripts/setup-categories.js
  */
@@ -21,27 +21,15 @@ const COLOR_OPTIONS = ['yellow','green','brown','orange','gray','pink','blue','p
   .map(c => ({ name: c, color: c === 'default' ? 'default' : c }))
 
 const DEFAULT_CATEGORIES = [
-  { name: 'Food',                  color: 'yellow'  },
-  { name: 'Health',                color: 'green'   },
-  { name: 'Transport',             color: 'brown'   },
-  { name: 'Shopping',              color: 'orange'  },
+  { name: 'Food', color: 'yellow' },
+  { name: 'Health', color: 'green' },
+  { name: 'Transport', color: 'brown' },
+  { name: 'Shopping', color: 'orange' },
   { name: 'Bills & Subscriptions', color: 'gray'    },
-  { name: 'Gifts & Celebrations',  color: 'pink'    },
-  { name: 'Travel',                color: 'blue'    },
-  { name: 'Pending Matcha',        color: 'green'   },
-  { name: 'Other',                 color: 'default' },
-]
-
-const DEFAULT_SUBCATEGORIES = [
-  { name: 'Hawker',             category: 'Food',   color: 'yellow'  },
-  { name: 'Groceries',          category: 'Food',   color: 'green'   },
-  { name: 'Cafe & Restaurants', category: 'Food',   color: 'orange'  },
-  { name: 'Drinks & Delivery',  category: 'Food',   color: 'pink'    },
-  { name: 'Gym',                category: 'Health', color: 'blue'    },
-  { name: 'Bouldering',         category: 'Health', color: 'purple'  },
-  { name: 'Supplements',        category: 'Health', color: 'gray'    },
-  { name: 'Skincare',           category: 'Health', color: 'pink'    },
-  { name: 'Medical',            category: 'Health', color: 'red'     },
+  { name: 'Gifts & Celebrations', color: 'pink' },
+  { name: 'Travel', color: 'blue' },
+  { name: 'Pending Matcha', color: 'green' },
+  { name: 'Other', color: 'default' },
 ]
 
 function writeEnv(key, value) {
@@ -59,15 +47,15 @@ async function run() {
 
   const colorProp = { select: { options: COLOR_OPTIONS } }
 
-  // ── Categories DB ───────────────────────────────────────────────────────────
+  // Category DB
   let catDbId = process.env.NOTION_CATEGORIES_DB
   if (catDbId) {
-    console.log(`Categories DB already exists: ${catDbId}`)
+    console.log(`Category DB already exists: ${catDbId}`)
   } else {
-    console.log('Creating Categories database…')
+    console.log('Creating Category database…')
     const db = await notion.databases.create({
       parent: { type: 'page_id', page_id: process.env.NOTION_PARENT_PAGE_ID },
-      title:  [{ type: 'text', text: { content: 'Categories' } }],
+      title:  [{ type: 'text', text: { content: 'Category' } }],
       properties: { Name: { title: {} }, Color: colorProp, Active: { checkbox: {} } },
     })
     catDbId = db.id
@@ -75,26 +63,10 @@ async function run() {
     console.log(`  ✓ Created: ${catDbId}`)
   }
 
-  // ── Subcategories DB ────────────────────────────────────────────────────────
-  let subcatDbId = process.env.NOTION_SUBCATEGORIES_DB
-  if (subcatDbId) {
-    console.log(`Subcategories DB already exists: ${subcatDbId}`)
-  } else {
-    console.log('Creating Subcategories database…')
-    const db = await notion.databases.create({
-      parent: { type: 'page_id', page_id: process.env.NOTION_PARENT_PAGE_ID },
-      title:  [{ type: 'text', text: { content: 'Subcategories' } }],
-      properties: { Name: { title: {} }, Category: { rich_text: {} }, Color: colorProp, Active: { checkbox: {} } },
-    })
-    subcatDbId = db.id
-    writeEnv('NOTION_SUBCATEGORIES_DB', subcatDbId)
-    console.log(`  ✓ Created: ${subcatDbId}`)
-  }
-
-  // ── Seed categories ─────────────────────────────────────────────────────────
+  // Seed categories
   const existingCats = await notion.databases.query({ database_id: catDbId, page_size: 1 })
   if (existingCats.results.length === 0) {
-    console.log('Seeding categories…')
+    console.log('Seeding category entries…')
     for (const cat of DEFAULT_CATEGORIES) {
       await notion.pages.create({
         parent: { database_id: catDbId },
@@ -107,27 +79,7 @@ async function run() {
       console.log(`  ✓ ${cat.name}`)
     }
   } else {
-    console.log('Categories already seeded — skipped')
-  }
-
-  // ── Seed subcategories ──────────────────────────────────────────────────────
-  const existingSubcats = await notion.databases.query({ database_id: subcatDbId, page_size: 1 })
-  if (existingSubcats.results.length === 0) {
-    console.log('Seeding subcategories…')
-    for (const sub of DEFAULT_SUBCATEGORIES) {
-      await notion.pages.create({
-        parent: { database_id: subcatDbId },
-        properties: {
-          Name:     { title: [{ text: { content: sub.name } }] },
-          Category: { rich_text: [{ text: { content: sub.category } }] },
-          Color:    { select: { name: sub.color } },
-          Active:   { checkbox: true },
-        },
-      })
-      console.log(`  ✓ ${sub.name} (${sub.category})`)
-    }
-  } else {
-    console.log('Subcategories already seeded — skipped')
+    console.log('Category already seeded — skipped')
   }
 
   console.log('\nDone. Restart the server.\n')

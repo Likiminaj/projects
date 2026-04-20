@@ -1,7 +1,7 @@
 /**
  * migrate-schema.js
  * Patches existing Notion databases to add any missing properties.
- * Safe to run multiple times — Notion ignores properties that already exist.
+ * Safe to run multiple times. Notion ignores properties that already exist.
  *
  * Usage: node scripts/migrate-schema.js
  */
@@ -13,27 +13,15 @@ dotenv.config()
 const notion = new Client({ auth: process.env.NOTION_TOKEN })
 
 const CATEGORY_OPTIONS = [
-  { name: 'Food',                  color: 'yellow'  },
-  { name: 'Health',                color: 'green'   },
-  { name: 'Transport',             color: 'brown'   },
-  { name: 'Shopping',              color: 'orange'  },
+  { name: 'Food', color: 'yellow' },
+  { name: 'Health', color: 'green' },
+  { name: 'Transport', color: 'brown' },
+  { name: 'Shopping', color: 'orange' },
   { name: 'Bills & Subscriptions', color: 'gray'    },
-  { name: 'Gifts & Celebrations',  color: 'pink'    },
-  { name: 'Travel',                color: 'blue'    },
-  { name: 'Pending Matcha',        color: 'green'   },
-  { name: 'Other',                 color: 'default' },
-]
-
-const SUBCATEGORY_OPTIONS = [
-  { name: 'Hawker',              color: 'yellow' },
-  { name: 'Groceries',           color: 'green'  },
-  { name: 'Cafe & Restaurants',  color: 'orange' },
-  { name: 'Drinks & Delivery',   color: 'pink'   },
-  { name: 'Gym',                 color: 'blue'   },
-  { name: 'Bouldering',          color: 'purple' },
-  { name: 'Supplements',         color: 'gray'   },
-  { name: 'Skincare',            color: 'pink'   },
-  { name: 'Medical',             color: 'red'    },
+  { name: 'Gifts & Celebrations', color: 'pink' },
+  { name: 'Travel', color: 'blue' },
+  { name: 'Pending Matcha', color: 'green' },
+  { name: 'Other', color: 'default' },
 ]
 
 const SOURCE_OPTIONS = [
@@ -60,23 +48,13 @@ async function patch(label, dbId, properties) {
 }
 
 async function run() {
-  console.log('\nMigrating Transactions DB…')
-  await patch(
-    'Add Subcategory',
-    process.env.NOTION_TRANSACTIONS_DB,
-    {
-      Subcategory: { select: { options: SUBCATEGORY_OPTIONS } },
-    }
-  )
-
   console.log('\nMigrating Recurring Expenses DB…')
   await patch(
-    'Add Direction, Category, Subcategory, Merchant, Source, Is Pending Matcha, Notes, Day',
+    'Add Direction, Category, Merchant, Source, Is Pending Matcha, Notes, Day',
     process.env.NOTION_RECURRING_DB,
     {
       Direction:           { select: { options: DIRECTION_OPTIONS } },
       Category:            { select: { options: CATEGORY_OPTIONS } },
-      Subcategory:         { select: { options: SUBCATEGORY_OPTIONS } },
       Merchant:            { rich_text: {} },
       Source:              { select: { options: SOURCE_OPTIONS } },
       'Is Pending Matcha': { checkbox: {} },
