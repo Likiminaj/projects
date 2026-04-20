@@ -152,42 +152,6 @@ function sseSend(res, event, data) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 }
 
-// ─── Apple amp-api token ─────────────────────────────────────────
-// The App Store app uses amp-api.apps.apple.com internally. The bearer token
-// is embedded in the apps.apple.com HTML and rotates every ~hour.
-let _ampToken = null
-let _ampTokenTs = 0
-
-async function getAmpToken() {
-  if (_ampToken && Date.now() - _ampTokenTs < 55 * 60 * 1000) return _ampToken
-
-  const res = await fetch('https://apps.apple.com/us/app/id284882215', {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    },
-  })
-  const html = await res.text()
-
-  // Token lives in a URL-encoded JSON meta tag
-  const metaMatch = html.match(/name="web-experience-app\/config\/environment"\s+content="([^"]+)"/)
-  if (metaMatch) {
-    try {
-      const cfg = JSON.parse(decodeURIComponent(metaMatch[1]))
-      const tok = cfg?.MEDIA_API?.token
-      if (tok) { _ampToken = tok; _ampTokenTs = Date.now(); return _ampToken }
-    } catch { /* fall through */ }
-  }
-
-  // Fallback: token appears inline in a <script> as "token":"eyJ..."
-  const scriptMatch = html.match(/"token"\s*:\s*"(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"/)
-  if (scriptMatch) {
-    _ampToken = scriptMatch[1]
-    _ampTokenTs = Date.now()
-    return _ampToken
-  }
-
-  throw new Error('Could not extract Apple amp-api token from apps.apple.com')
-}
 
 // ─── Search ──────────────────────────────────────────────────────
 async function searchApple(term) {
@@ -202,107 +166,41 @@ async function searchGoogle(term) {
 
 // ─── Streaming fetchers ───────────────────────────────────────────
 
-// Apple: uses the same amp-api the App Store app itself uses.
-// Paginates via offset (20 per page) up to MAX_REVIEWS.
+// Apple: uses app-store-scraper (iTunes RSS/API) — no website token scraping.
+// Iterates RECENT + HELPFUL sort orders, up to 10 pages × 50 reviews each.
 async function streamAppleReviews({ res, appId, startDate, endDate, appName, seen, signal }) {
   const numericId = Number.parseInt(appId, 10)
   if (Number.isNaN(numericId)) throw new Error('Apple app IDs must be numeric')
 
-  let token
-  try {
-    token = await getAmpToken()
-  } catch (err) {
-    // Graceful fallback to RSS if token extraction fails
-    console.warn('amp-api token failed, falling back to RSS:', err.message)
-    await streamAppleReviewsRSS({ res, appId: numericId, startDate, endDate, appName, seen, signal })
-    return
-  }
+  const sorts = [appstore.sort.RECENT, appstore.sort.HELPFUL]
 
-  const MAX_REVIEWS = 5000
-  let offset = 0
-
-  while (offset < MAX_REVIEWS) {
-    if (signal.aborted) return
-
-    let json
-    try {
-      const url = new URL(`https://amp-api.apps.apple.com/v1/catalog/us/apps/${numericId}/reviews`)
-      url.searchParams.set('l', 'en-US')
-      url.searchParams.set('offset', String(offset))
-      url.searchParams.set('limit', '20')
-      url.searchParams.set('platform', 'web')
-      url.searchParams.set('additionalPlatforms', 'appletv,ipad,iphone,mac')
-
-      const r = await fetch(url.toString(), {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Origin': 'https://apps.apple.com',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        },
-      })
-
-      if (!r.ok) break
-      json = await r.json()
-    } catch { break }
-
-    const entries = Array.isArray(json?.data) ? json.data : []
-    if (entries.length === 0) break
-
-    const raw = entries.map(e => ({
-      review_text: e?.attributes?.review ?? '',
-      rating:      e?.attributes?.rating ?? 0,
-      date:        toDateOnly(e?.attributes?.date),
-      platform:    'ios',
-      app_name:    appName,
-      version:     e?.attributes?.isEdited ? null : null,
-      review_id:   e?.id ?? null,
-      author:      e?.attributes?.userName ?? null,
-    }))
-
-    const inRange = raw.filter(r => isWithinRange(r.date, startDate, endDate))
-    const cleaned = prepareIncremental(inRange, seen).map(enrichReview)
-    if (cleaned.length > 0) sseSend(res, 'batch', { reviews: cleaned })
-
-    // No `next` cursor = end of results
-    if (!json?.next) break
-    offset += entries.length
-  }
-}
-
-// RSS fallback (used when amp-api token can't be obtained)
-async function streamAppleReviewsRSS({ res, appId, startDate, endDate, appName, seen, signal }) {
-  for (const sortBy of ['mostRecent', 'mostHelpful']) {
+  for (const sort of sorts) {
     for (let page = 1; page <= 10; page++) {
       if (signal.aborted) return
-      let data
+
+      let entries
       try {
-        const r = await fetch(
-          `https://itunes.apple.com/us/rss/customerreviews/page=${page}/id=${appId}/sortby=${sortBy}/json`,
-        )
-        data = await r.json()
+        entries = await appstore.reviews({ id: numericId, sort, page, country: 'us' })
       } catch { break }
 
-      const entries = data?.feed?.entry
       if (!Array.isArray(entries) || entries.length === 0) break
 
-      const raw = []
-      for (const e of entries) {
-        if (!e?.['im:rating']) continue
-        raw.push({
-          review_text: e?.content?.label != null ? String(e.content.label) : '',
-          rating:      Number.parseInt(e?.['im:rating']?.label ?? '0', 10) || 0,
-          date:        toDateOnly(e?.updated?.label),
-          platform:    'ios',
-          app_name:    appName,
-          version:     e?.['im:version']?.label ?? null,
-          review_id:   e?.id?.label ? String(e.id.label) : null,
-          author:      e?.author?.name?.label ?? null,
-        })
-      }
+      const raw = entries.map(e => ({
+        review_text: e.text != null ? String(e.text) : '',
+        rating:      e.score ?? 0,
+        date:        toDateOnly(e.updated),
+        platform:    'ios',
+        app_name:    appName,
+        version:     e.version ?? null,
+        review_id:   e.id != null ? String(e.id) : null,
+        author:      e.userName ?? null,
+      }))
 
       const inRange = raw.filter(r => isWithinRange(r.date, startDate, endDate))
       const cleaned = prepareIncremental(inRange, seen).map(enrichReview)
       if (cleaned.length > 0) sseSend(res, 'batch', { reviews: cleaned })
+
+      if (entries.length < 50) break
     }
     if (signal.aborted) return
   }
