@@ -250,7 +250,7 @@ app.get('/api/reviews/stream', async (req, res) => {
   res.end()
 })
 
-app.post('/api/ios/parse', upload.array('screenshots', 20), async (req, res) => {
+app.post('/api/ios/parse', upload.array('screenshots', 10), async (req, res) => {
   const appName = String(req.body.app_name ?? '').trim() || 'iOS App'
   const files   = req.files ?? []
 

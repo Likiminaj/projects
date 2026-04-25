@@ -119,10 +119,10 @@ function SearchDropdown({ candidates, loading, query, setQuery, onSearch, onSele
               value={query}
               onChange={e => setQuery(e.target.value)}
               onFocus={() => ranked.length && setOpen(true)}
-              placeholder="Company or app name…"
+              placeholder="Company or app name..."
             />
             <Button type="submit" variant="primary" size="sm" disabled={loading}>
-              {loading ? '…' : 'Search'}
+              {loading ? '...' : 'Search'}
             </Button>
           </div>
         </Field>
@@ -172,7 +172,7 @@ function SelectedApps({ apps, onRemove }) {
               <span className="selected-chip__name">{app.name}</span>
               <Badge variant={PLATFORM_COLORS[app.platform]}>{PLATFORM_LABELS[app.platform]}</Badge>
             </div>
-            <button className="selected-chip__remove" onClick={() => onRemove(app)} aria-label="Remove">×</button>
+            <button className="selected-chip__remove" onClick={() => onRemove(app)} aria-label="Remove">x</button>
           </div>
         ))}
       </div>
@@ -180,51 +180,129 @@ function SelectedApps({ apps, onRemove }) {
   )
 }
 
-// ─── iOS screenshot upload ────────────────────────────────────────
+// ─── iOS upload modal ─────────────────────────────────────────────
 
-function IosUploadSection({ iosInput, setIosInput, iosParsing, iosParseError, onParse, iosApps, onRemove }) {
+function IosUploadModal({ onClose, onReviewsExtracted }) {
+  const [appName, setAppName]       = useState('')
+  const [files, setFiles]           = useState([])
+  const [fileError, setFileError]   = useState('')
+  const [parsing, setParsing]       = useState(false)
+  const [parseError, setParseError] = useState('')
+  const [lastResult, setLastResult] = useState(null)
   const fileRef = useRef(null)
 
+  function handleFileChange(e) {
+    const selected = Array.from(e.target.files)
+    if (selected.length > 10) {
+      setFileError('Maximum 10 screenshots per batch.')
+      setFiles([])
+      e.target.value = ''
+    } else {
+      setFileError('')
+      setFiles(selected)
+    }
+  }
+
+  async function handleParse() {
+    const name = appName.trim()
+    if (!name || !files.length || fileError) return
+    setParsing(true)
+    setParseError('')
+    setLastResult(null)
+    try {
+      const formData = new FormData()
+      formData.append('app_name', name)
+      for (const f of files) formData.append('screenshots', f)
+      const res  = await fetch('/api/ios/parse', { method: 'POST', body: formData })
+      const data = await safeJson(res, 'iOS parse failed')
+      if (!res.ok) throw new Error(data.error || 'Parse failed')
+      onReviewsExtracted(name, data.reviews ?? [])
+      setLastResult({ count: (data.reviews ?? []).length, appName: name })
+      setFiles([])
+      if (fileRef.current) fileRef.current.value = ''
+    } catch (err) {
+      setParseError(err.message || 'Failed to parse screenshots')
+    } finally {
+      setParsing(false)
+    }
+  }
+
   return (
-    <div className="sidebar-form">
-      <p className="ios-upload__label">Add iOS App (App Store screenshots)</p>
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="ios-modal-title">
+        <div className="modal__header">
+          <h2 className="modal__title" id="ios-modal-title">Upload iOS Reviews</h2>
+          <button className="modal__close" onClick={onClose} aria-label="Close">x</button>
+        </div>
 
-      <Field label="App name">
-        <Input
-          value={iosInput.name}
-          onChange={e => setIosInput(v => ({ ...v, name: e.target.value }))}
-          placeholder="e.g. Grab, Uber…"
-        />
-      </Field>
+        <div className="modal__body">
+          <p className="modal__desc">
+            Upload App Store screenshots in batches of up to 10. Reviews are extracted automatically
+            and appended — upload multiple batches for the same app to accumulate more data.
+          </p>
 
-      <Field label="Screenshots">
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="file-input"
-          onChange={e => setIosInput(v => ({ ...v, files: Array.from(e.target.files) }))}
-        />
-      </Field>
+          <Field label="App name">
+            <Input
+              value={appName}
+              onChange={e => setAppName(e.target.value)}
+              placeholder="e.g. Grab, Uber..."
+            />
+          </Field>
 
-      {iosInput.files.length > 0 && (
-        <Note variant="muted">{iosInput.files.length} file{iosInput.files.length > 1 ? 's' : ''} selected</Note>
-      )}
+          <Field label="Screenshots (max 10 per batch)">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="file-input"
+              onChange={handleFileChange}
+            />
+          </Field>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={iosParsing || !iosInput.name.trim() || !iosInput.files.length}
-        onClick={onParse}
-      >
-        {iosParsing ? 'Parsing screenshots…' : 'Parse Screenshots'}
-      </Button>
+          {fileError && <Note variant="error">{fileError}</Note>}
+          {!fileError && files.length > 0 && (
+            <Note variant="muted">{files.length} file{files.length > 1 ? 's' : ''} selected</Note>
+          )}
 
-      {iosParseError && <Note variant="error">{iosParseError}</Note>}
+          {lastResult && (
+            <Note variant="success">
+              {lastResult.count} review{lastResult.count !== 1 ? 's' : ''} extracted from {lastResult.appName}.
+              Upload another batch or click Done.
+            </Note>
+          )}
+
+          {parseError && <Note variant="error">{parseError}</Note>}
+        </div>
+
+        <div className="modal__footer">
+          <Button variant="ghost" size="sm" onClick={onClose}>Done</Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={parsing || !appName.trim() || !files.length || !!fileError}
+            onClick={handleParse}
+          >
+            {parsing ? 'Extracting...' : 'Extract Reviews'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── iOS apps sidebar list ────────────────────────────────────────
+
+function IosAppsList({ iosApps, onRemove, onOpenModal }) {
+  return (
+    <div className="ios-section">
+      <div className="ios-section__header">
+        <p className="ios-upload__label">iOS App Store</p>
+        <Button variant="ghost" size="sm" onClick={onOpenModal}>Upload Screenshots</Button>
+      </div>
 
       {iosApps.length > 0 && (
-        <div className="selected-apps">
+        <div className="selected-apps" style={{ marginTop: 10 }}>
           <p className="selected-apps__label">iOS apps added</p>
           <div className="selected-chips">
             {iosApps.map(app => (
@@ -235,12 +313,65 @@ function IosUploadSection({ iosInput, setIosInput, iosParsing, iosParseError, on
                   <Badge variant="blue">App Store</Badge>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{app.reviews.length} reviews</span>
                 </div>
-                <button className="selected-chip__remove" onClick={() => onRemove(app)} aria-label="Remove">×</button>
+                <button className="selected-chip__remove" onClick={() => onRemove(app)} aria-label="Remove">x</button>
               </div>
             ))}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Platform comparison ──────────────────────────────────────────
+
+function PlatformComparison({ reviews }) {
+  const androidReviews = reviews.filter(r => r.platform === 'android')
+  const iosReviews     = reviews.filter(r => r.platform === 'ios')
+
+  if (!androidReviews.length || !iosReviews.length) return null
+
+  function stats(rs) {
+    const total     = rs.length
+    const pos       = rs.filter(r => r.sentiment_label === 'positive').length
+    const neg       = rs.filter(r => r.sentiment_label === 'negative').length
+    const avgRating = total ? rs.reduce((s, r) => s + r.rating, 0) / total : 0
+    return { total, pos, neg, avgRating }
+  }
+
+  const gp  = stats(androidReviews)
+  const ios = stats(iosReviews)
+
+  const rows = [
+    { label: 'Total Reviews', gp: gp.total.toLocaleString(),                   ios: ios.total.toLocaleString() },
+    { label: 'Avg Rating',    gp: gp.avgRating.toFixed(1),                     ios: ios.avgRating.toFixed(1) },
+    { label: 'Positive %',    gp: `${Math.round(gp.pos / gp.total * 100)}%`,   ios: `${Math.round(ios.pos / ios.total * 100)}%` },
+    { label: 'Negative %',    gp: `${Math.round(gp.neg / gp.total * 100)}%`,   ios: `${Math.round(ios.neg / ios.total * 100)}%` },
+  ]
+
+  return (
+    <div className="platform-comparison">
+      <p className="chart-label" style={{ marginBottom: 10, marginTop: 20 }}>Platform comparison</p>
+      <div className="table-wrap" style={{ maxHeight: 'none' }}>
+        <table className="comparison-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Google Play</th>
+              <th>App Store</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.label}>
+                <td className="comparison-table__metric">{row.label}</td>
+                <td>{row.gp}</td>
+                <td>{row.ios}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -264,12 +395,12 @@ function Scorecard({ byApp }) {
     <div className="scorecard">
       <div className="scorecard__apps">
         {entries.map(({ app, reviews }) => {
-          const total   = reviews.length
-          const avgRating    = total ? reviews.reduce((s, r) => s + r.rating, 0) / total : 0
-          const pos     = reviews.filter(r => r.sentiment_label === 'positive').length
-          const neg     = reviews.filter(r => r.sentiment_label === 'negative').length
-          const neu     = reviews.filter(r => r.sentiment_label === 'neutral').length
-          const avgSent = total ? reviews.reduce((s, r) => s + (r.sentiment_score ?? 0), 0) / total : 0
+          const total     = reviews.length
+          const avgRating = total ? reviews.reduce((s, r) => s + r.rating, 0) / total : 0
+          const pos       = reviews.filter(r => r.sentiment_label === 'positive').length
+          const neg       = reviews.filter(r => r.sentiment_label === 'negative').length
+          const neu       = reviews.filter(r => r.sentiment_label === 'neutral').length
+          const avgSent   = total ? reviews.reduce((s, r) => s + (r.sentiment_score ?? 0), 0) / total : 0
 
           return (
             <div key={app.app_id} className="scorecard__col">
@@ -281,12 +412,12 @@ function Scorecard({ byApp }) {
                 </div>
               </div>
               <div className="scorecard__metrics">
-                <ScoreMetric label="Reviews"      value={total.toLocaleString()} />
-                <ScoreMetric label="Avg Rating"   value={total ? avgRating.toFixed(1) : '—'} />
-                <ScoreMetric label="Positive"     value={total ? `${Math.round(pos / total * 100)}%` : '—'} color="var(--green)" />
-                <ScoreMetric label="Neutral"      value={total ? `${Math.round(neu / total * 100)}%` : '—'} color="var(--text-muted)" />
-                <ScoreMetric label="Negative"     value={total ? `${Math.round(neg / total * 100)}%` : '—'} color="var(--red)" />
-                <ScoreMetric label="Avg Sentiment" value={total ? (avgSent >= 0 ? '+' : '') + avgSent.toFixed(3) : '—'} />
+                <ScoreMetric label="Reviews"       value={total.toLocaleString()} />
+                <ScoreMetric label="Avg Rating"    value={total ? avgRating.toFixed(1) : '-'} />
+                <ScoreMetric label="Positive"      value={total ? `${Math.round(pos / total * 100)}%` : '-'} color="var(--green)" />
+                <ScoreMetric label="Neutral"       value={total ? `${Math.round(neu / total * 100)}%` : '-'} color="var(--text-muted)" />
+                <ScoreMetric label="Negative"      value={total ? `${Math.round(neg / total * 100)}%` : '-'} color="var(--red)" />
+                <ScoreMetric label="Avg Sentiment" value={total ? (avgSent >= 0 ? '+' : '') + avgSent.toFixed(3) : '-'} />
               </div>
             </div>
           )
@@ -328,7 +459,7 @@ function ReviewTable({ reviews, filename = 'reviews.csv' }) {
                   <td>{r.rating} / 5</td>
                   <td>
                     <div className="sentiment-cell">
-                      <Badge variant={sv}>{r.sentiment_label ?? '—'}</Badge>
+                      <Badge variant={sv}>{r.sentiment_label ?? '-'}</Badge>
                       {r.sentiment_score != null && (
                         <span className={`sentiment-score sentiment-${r.sentiment_label ?? 'neutral'}`}>
                           {sign}{r.sentiment_score}
@@ -336,8 +467,8 @@ function ReviewTable({ reviews, filename = 'reviews.csv' }) {
                       )}
                     </div>
                   </td>
-                  <td>{r.date ?? '—'}</td>
-                  <td>{r.version ?? '—'}</td>
+                  <td>{r.date ?? '-'}</td>
+                  <td>{r.version ?? '-'}</td>
                 </tr>
               )
             })}
@@ -415,11 +546,11 @@ function ReviewDropdown({ byApp, progress }) {
           onChange={e => setSelected(e.target.value)}
         >
           {keys.map(k => {
-            const a = byApp[k].app
+            const a   = byApp[k].app
             const cnt = byApp[k].reviews.length
             return (
               <option key={k} value={k}>
-                {a.name} · {PLATFORM_LABELS[a.platform]} · {cnt.toLocaleString()} reviews{progress[k] && byApp[k].reviews.length === 0 ? ` (loading…)` : ''}
+                {a.name} - {PLATFORM_LABELS[a.platform]} - {cnt.toLocaleString()} reviews{progress[k] && byApp[k].reviews.length === 0 ? ' (loading...)' : ''}
               </option>
             )
           })}
@@ -428,7 +559,7 @@ function ReviewDropdown({ byApp, progress }) {
 
       {inProgress !== undefined && (
         <Note variant="muted" style={{ marginBottom: 12 }}>
-          Streaming… {inProgress.toLocaleString()} reviews loaded so far
+          Streaming... {inProgress.toLocaleString()} reviews loaded so far
         </Note>
       )}
 
@@ -457,19 +588,17 @@ function ReviewDropdown({ byApp, progress }) {
 // ─── Main app ─────────────────────────────────────────────────────
 
 export default function App() {
-  const [query, setQuery]             = useState('')
-  const [candidates, setCandidates]   = useState([])
-  const [searchState, setSearchState] = useState({ loading: false, error: '' })
+  const [query, setQuery]               = useState('')
+  const [candidates, setCandidates]     = useState([])
+  const [searchState, setSearchState]   = useState({ loading: false, error: '' })
   const [selectedApps, setSelectedApps] = useState([])
-  const [dateRange, setDateRange]     = useState(() => getDefaultDateRange())
+  const [dateRange, setDateRange]       = useState(() => getDefaultDateRange())
   const [analysisState, setAnalysisState] = useState({ loading: false, error: '', progress: {} })
   const [analysisData, setAnalysisData]   = useState(null)
   const streamsRef = useRef([])
 
-  const [iosInput, setIosInput]           = useState({ name: '', files: [] })
-  const [iosParsing, setIosParsing]       = useState(false)
-  const [iosParseError, setIosParseError] = useState('')
-  const [iosApps, setIosApps]             = useState([])
+  const [iosApps, setIosApps]           = useState([])
+  const [iosModalOpen, setIosModalOpen] = useState(false)
 
   function closeStreams() {
     streamsRef.current.forEach(es => es.close())
@@ -509,30 +638,31 @@ export default function App() {
     setIosApps(prev => prev.filter(a => a.app_id !== app.app_id))
   }
 
-  async function handleParseIos() {
-    const name = iosInput.name.trim()
-    if (!name || !iosInput.files.length) return
-    setIosParsing(true)
-    setIosParseError('')
-    try {
-      const formData = new FormData()
-      formData.append('app_name', name)
-      for (const f of iosInput.files) formData.append('screenshots', f)
-      const res  = await fetch('/api/ios/parse', { method: 'POST', body: formData })
-      const data = await safeJson(res, 'iOS parse failed')
-      if (!res.ok) throw new Error(data.error || 'Parse failed')
+  // Appends extracted reviews to an existing iOS app entry, or creates a new one.
+  // Deduplicates by review_id (if present) or exact review_text.
+  function handleReviewsExtracted(appName, reviews) {
+    if (!reviews.length) return
+    setIosApps(prev => {
+      const existing = prev.find(a => a.name.toLowerCase() === appName.toLowerCase())
+      if (existing) {
+        const seen  = new Set(existing.reviews.map(r => r.review_id ?? r.review_text))
+        const fresh = reviews
+          .map(r => ({ ...r, app_id: existing.app_id }))
+          .filter(r => !seen.has(r.review_id ?? r.review_text))
+        return prev.map(a =>
+          a.app_id === existing.app_id ? { ...a, reviews: [...a.reviews, ...fresh] } : a
+        )
+      }
       const appId = `ios_${Date.now()}`
-      const taggedReviews = (data.reviews ?? []).map(r => ({ ...r, app_id: appId }))
-      setIosApps(prev => {
-        const filtered = prev.filter(a => a.name.toLowerCase() !== name.toLowerCase())
-        return [...filtered, { app_id: appId, name, platform: 'ios', reviews: taggedReviews, icon: '', store: 'App Store' }]
-      })
-      setIosInput({ name: '', files: [] })
-    } catch (err) {
-      setIosParseError(err.message || 'Failed to parse screenshots')
-    } finally {
-      setIosParsing(false)
-    }
+      return [...prev, {
+        app_id:   appId,
+        name:     appName,
+        platform: 'ios',
+        reviews:  reviews.map(r => ({ ...r, app_id: appId })),
+        icon:     '',
+        store:    'App Store',
+      }]
+    })
   }
 
   function handleAnalyse() {
@@ -540,7 +670,6 @@ export default function App() {
     if (!allApps.length) return
     closeStreams()
 
-    // Pre-seed with iOS reviews
     const initByApp = {}
     let initReviews = []
     for (const app of iosApps) {
@@ -618,9 +747,7 @@ export default function App() {
 
   const canAnalyse      = (selectedApps.length > 0 || iosApps.length > 0) && !analysisState.loading
   const allSelectedApps = [...selectedApps, ...iosApps]
-
-  // Map app_id → app name for progress banner
-  const appById = Object.fromEntries(allSelectedApps.map(a => [a.app_id, a]))
+  const appById         = Object.fromEntries(allSelectedApps.map(a => [a.app_id, a]))
 
   return (
     <div className="app-shell">
@@ -631,7 +758,7 @@ export default function App() {
 
       <div className="workspace">
 
-        {/* ── Sidebar ── */}
+        {/* Sidebar */}
         <aside>
           <Card>
             <CardHeader title="Configure" subtitle="Select apps and date range to analyse." />
@@ -660,14 +787,10 @@ export default function App() {
 
               <Divider />
 
-              <IosUploadSection
-                iosInput={iosInput}
-                setIosInput={setIosInput}
-                iosParsing={iosParsing}
-                iosParseError={iosParseError}
-                onParse={handleParseIos}
+              <IosAppsList
                 iosApps={iosApps}
                 onRemove={handleRemoveIos}
+                onOpenModal={() => setIosModalOpen(true)}
               />
 
               <Divider />
@@ -690,7 +813,7 @@ export default function App() {
                     onClick={handleAnalyse}
                   >
                     {analysisState.loading
-                      ? 'Analysing…'
+                      ? 'Analysing...'
                       : `Analyse${allSelectedApps.length > 1 ? ` (${allSelectedApps.length} apps)` : ''}`}
                   </Button>
 
@@ -703,12 +826,12 @@ export default function App() {
           </Card>
         </aside>
 
-        {/* ── Main panel ── */}
+        {/* Main panel */}
         <main className="main-content">
           {!analysisData && analysisState.loading ? (
             <div className="analysis-loading">
               <div>
-                <Spinner label={`Fetching reviews for ${selectedApps.map(a => a.name).join(', ')}…`} />
+                <Spinner label={`Fetching reviews for ${selectedApps.map(a => a.name).join(', ')}...`} />
                 {Object.entries(analysisState.progress).map(([id, count]) => (
                   <p key={id} className="stream-progress-line">
                     {appById[id]?.name ?? id}: {count.toLocaleString()} reviews loaded
@@ -718,7 +841,7 @@ export default function App() {
             </div>
           ) : !analysisData ? (
             <div className="analysis-empty">
-              <span className="analysis-empty__icon">📊</span>
+              <span className="analysis-empty__icon">chart</span>
               <p className="analysis-empty__title">Nothing to show yet</p>
               <p className="analysis-empty__body">Search for Google Play apps or add iOS screenshots, then click Analyse.</p>
             </div>
@@ -728,7 +851,7 @@ export default function App() {
                 <div className="stream-banner">
                   <div className="stream-banner__left">
                     <div className="spinner" aria-hidden="true" />
-                    <span>Loading more reviews…</span>
+                    <span>Loading more reviews...</span>
                   </div>
                   <div className="stream-banner__counts">
                     {Object.entries(analysisState.progress).map(([id, count]) => (
@@ -741,9 +864,10 @@ export default function App() {
               <Card>
                 <CardHeader
                   title="Overview"
-                  subtitle={`${analysisData.reviews.length} total reviews · ${dateRange.start} to ${dateRange.end}`}
+                  subtitle={`${analysisData.reviews.length} total reviews - ${dateRange.start} to ${dateRange.end}`}
                 />
                 <Scorecard byApp={analysisData.byApp} />
+                <PlatformComparison reviews={analysisData.reviews} />
               </Card>
 
               <ReviewDropdown byApp={analysisData.byApp} progress={analysisState.progress} />
@@ -752,6 +876,13 @@ export default function App() {
         </main>
 
       </div>
+
+      {iosModalOpen && (
+        <IosUploadModal
+          onClose={() => setIosModalOpen(false)}
+          onReviewsExtracted={handleReviewsExtracted}
+        />
+      )}
     </div>
   )
 }
