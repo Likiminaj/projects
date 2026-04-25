@@ -29,6 +29,13 @@ export async function buildCategoryProperty(category) {
     if (cats.results.length > 0) {
       return { Category: { relation: [{ id: cats.results[0].id }] } }
     }
+    // Exact match failed — scan all categories for case-insensitive match
+    const allCats = await notion.databases.query({ database_id: CATEGORIES_DB(), page_size: 100 })
+    const needle  = category.trim().toLowerCase()
+    const match   = allCats.results.find(p =>
+      (p.properties.Name?.title?.[0]?.plain_text ?? '').trim().toLowerCase() === needle
+    )
+    if (match) return { Category: { relation: [{ id: match.id }] } }
     return {}
   }
   return { Category: { select: { name: category } } }

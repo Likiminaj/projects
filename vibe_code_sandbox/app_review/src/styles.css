@@ -75,9 +75,9 @@ img {
 
 /* ─── App shell ────────────────────────────────────────────────── */
 .app-shell {
-  max-width: 1320px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 48px 28px 96px;
+  padding: 48px 48px 96px;
 }
 
 /* ─── Page header ──────────────────────────────────────────────── */
@@ -126,7 +126,7 @@ img {
 /* ─── Workspace layout ─────────────────────────────────────────── */
 .workspace {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 1fr;
   gap: 20px;
   align-items: start;
 }
@@ -308,6 +308,7 @@ img {
 /* ─── Search dropdown ──────────────────────────────────────────── */
 .search-container {
   position: relative;
+  max-width: 480px;
 }
 
 .search-input-row {
@@ -1064,12 +1065,6 @@ td:first-child {
 }
 
 /* ─── Responsive ───────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 640px) {
   .app-shell {
     padding: 28px 16px 72px;
