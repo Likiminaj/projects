@@ -1,11 +1,16 @@
 import express from 'express'
 import { createRequire } from 'node:module'
+import Anthropic from '@anthropic-ai/sdk'
 
 const require = createRequire(import.meta.url)
 const gplayModule = require('google-play-scraper')
 const gplay = gplayModule.default ?? gplayModule
-const appstore = require('app-store-scraper')
 const vader = require('vader-sentiment')
+const multerLib = require('multer')
+const multer = multerLib.default ?? multerLib
+
+const anthropic = new Anthropic()
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
 const app = express()
 const port = Number.parseInt(process.env.PORT ?? '8787', 10)
@@ -27,21 +32,6 @@ function isWithinRange(dateValue, startDate, endDate) {
 }
 
 // ─── Search mappers ──────────────────────────────────────────────
-function mapAppleSearchResult(result) {
-  return {
-    name: result.title,
-    app_id: String(result.id),
-    platform: 'ios',
-    publisher: result.developer ?? '',
-    category: result.genre ?? result.primaryGenre ?? 'App',
-    description: result.description ?? '',
-    icon: result.icon ?? '',
-    url: result.url ?? '',
-    store: 'App Store',
-    aliases: [result.title, result.developer, result.genre, 'App Store'].filter(Boolean),
-  }
-}
-
 function mapGoogleSearchResult(result) {
   return {
     name: result.title,
@@ -90,7 +80,7 @@ function enrichReview(review) {
   const date = review.date ?? ''
   return {
     ...review,
-    source: review.platform === 'ios' ? 'App Store' : 'Google Play',
+    source: 'Google Play',
     review_month: date.length >= 7 ? date.slice(0, 7) : null,
     review_length: review.review_text.length,
     has_text: review.review_text.length > 0,
@@ -154,57 +144,12 @@ function sseSend(res, event, data) {
 
 
 // ─── Search ──────────────────────────────────────────────────────
-async function searchApple(term) {
-  const results = await appstore.search({ term, num: 10, page: 1, country: 'us', lang: 'en-us' })
-  return results.map(mapAppleSearchResult)
-}
-
 async function searchGoogle(term) {
   const results = await gplay.search({ term, num: 10, lang: 'en', country: 'us' })
   return results.map(mapGoogleSearchResult)
 }
 
 // ─── Streaming fetchers ───────────────────────────────────────────
-
-// Apple: uses app-store-scraper (iTunes RSS/API) — no website token scraping.
-// Iterates RECENT + HELPFUL sort orders, up to 10 pages × 50 reviews each.
-async function streamAppleReviews({ res, appId, startDate, endDate, appName, seen, signal }) {
-  const numericId = Number.parseInt(appId, 10)
-  if (Number.isNaN(numericId)) throw new Error('Apple app IDs must be numeric')
-
-  const sorts = [appstore.sort.RECENT, appstore.sort.HELPFUL]
-
-  for (const sort of sorts) {
-    for (let page = 1; page <= 10; page++) {
-      if (signal.aborted) return
-
-      let entries
-      try {
-        entries = await appstore.reviews({ id: numericId, sort, page, country: 'us' })
-      } catch { break }
-
-      if (!Array.isArray(entries) || entries.length === 0) break
-
-      const raw = entries.map(e => ({
-        review_text: e.text != null ? String(e.text) : '',
-        rating:      e.score ?? 0,
-        date:        toDateOnly(e.updated),
-        platform:    'ios',
-        app_name:    appName,
-        version:     e.version ?? null,
-        review_id:   e.id != null ? String(e.id) : null,
-        author:      e.userName ?? null,
-      }))
-
-      const inRange = raw.filter(r => isWithinRange(r.date, startDate, endDate))
-      const cleaned = prepareIncremental(inRange, seen).map(enrichReview)
-      if (cleaned.length > 0) sseSend(res, 'batch', { reviews: cleaned })
-
-      if (entries.length < 50) break
-    }
-    if (signal.aborted) return
-  }
-}
 
 // Google Play: paginate NEWEST + RATING sort orders until tokens run out, capped at 30 pages each
 async function streamGoogleReviews({ res, appId, startDate, endDate, appName, seen, signal }) {
@@ -256,15 +201,14 @@ app.get('/api/search', async (req, res) => {
     return
   }
 
-  const [apple, google] = await Promise.allSettled([searchApple(term), searchGoogle(term)])
   const candidates = []
   const errors = []
 
-  if (apple.status === 'fulfilled') candidates.push(...apple.value)
-  else errors.push({ source: 'app_store', message: apple.reason?.message ?? 'App Store search failed' })
-
-  if (google.status === 'fulfilled') candidates.push(...google.value)
-  else errors.push({ source: 'google_play', message: google.reason?.message ?? 'Google Play search failed' })
+  try {
+    candidates.push(...await searchGoogle(term))
+  } catch (err) {
+    errors.push({ source: 'google_play', message: err?.message ?? 'Google Play search failed' })
+  }
 
   res.json({ query: term, candidates, errors })
 })
@@ -291,12 +235,10 @@ app.get('/api/reviews/stream', async (req, res) => {
   const ctx  = { res, appId, startDate, endDate, appName, seen, signal: ac.signal }
 
   try {
-    if (platform === 'ios') {
-      await streamAppleReviews(ctx)
-    } else if (platform === 'android') {
+    if (platform === 'android') {
       await streamGoogleReviews(ctx)
     } else {
-      sseSend(res, 'error', { message: 'platform must be ios or android' })
+      sseSend(res, 'error', { message: 'platform must be android' })
       res.end()
       return
     }
@@ -306,6 +248,66 @@ app.get('/api/reviews/stream', async (req, res) => {
 
   sseSend(res, 'done', { total: seen.size })
   res.end()
+})
+
+app.post('/api/ios/parse', upload.array('screenshots', 20), async (req, res) => {
+  const appName = String(req.body.app_name ?? '').trim() || 'iOS App'
+  const files   = req.files ?? []
+
+  if (!files.length) {
+    res.status(400).json({ error: 'No screenshots provided' })
+    return
+  }
+
+  const allRaw = []
+
+  for (const file of files) {
+    const base64    = file.buffer.toString('base64')
+    const mediaType = file.mimetype.startsWith('image/') ? file.mimetype : 'image/jpeg'
+
+    try {
+      const msg = await anthropic.messages.create({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 2048,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            {
+              type: 'text',
+              text: `Extract every app review visible in this App Store screenshot. Return ONLY a JSON array — no markdown, no explanation. Each element: {"author":string,"rating":integer 1-5,"date":"YYYY-MM-DD or null","title":string or null,"review_text":string}. Today is ${new Date().toISOString().slice(0, 10)} — use it to convert relative dates ("2 days ago", "last week", etc.). If no reviews are visible, return [].`,
+            },
+          ],
+        }],
+      })
+
+      const text    = msg.content[0]?.text ?? '[]'
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+      let parsed
+      try { parsed = JSON.parse(cleaned) } catch { parsed = [] }
+
+      if (Array.isArray(parsed)) {
+        for (const r of parsed) {
+          allRaw.push({
+            review_text: String(r.review_text ?? ''),
+            rating:      Math.min(5, Math.max(1, Number(r.rating) || 3)),
+            date:        toDateOnly(r.date),
+            platform:    'ios',
+            app_name:    appName,
+            version:     null,
+            review_id:   r.title ? `${r.author ?? ''}_${r.title}`.slice(0, 64) : null,
+            author:      r.author ?? null,
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Screenshot parse error:', err.message)
+    }
+  }
+
+  const seen    = new Set()
+  const reviews = prepareIncremental(allRaw, seen).map(enrichReview)
+  res.json({ reviews, count: reviews.length })
 })
 
 app.listen(port, () => {

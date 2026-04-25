@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { rankApps } from './lib/fuzzy.js'
 import { getDefaultDateRange } from './lib/time.js'
-import { Button, Badge, Card, CardHeader, Field, Input, EmptyState, Note, Spinner, Divider } from './components/ui.jsx'
+import { Button, Badge, Card, CardHeader, Field, Input, Note, Spinner, Divider } from './components/ui.jsx'
 import { SentimentTrendChart } from './components/SentimentChart.jsx'
 
 const QUICK_STARTS = ['Zig', 'Grab', 'Uber', 'Bolt', 'Gojek', 'Lyft']
 
 const PLATFORM_COLORS = { ios: 'blue', android: 'green' }
 const PLATFORM_LABELS = { ios: 'App Store', android: 'Google Play' }
+const PLATFORM_CHART_COLOR = { ios: '#2563EB', android: '#16A34A' }
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ function AppIcon({ src, name, size = 44, className = 'app-icon', fallbackClass =
   return <img className={className} src={src} alt={name} width={size} height={size} onError={() => setFailed(true)} />
 }
 
-// ─── Sidebar: search + selection ─────────────────────────────────
+// ─── Sidebar: Google Play search + selection ──────────────────────
 
 function SearchDropdown({ candidates, loading, query, setQuery, onSearch, onSelect, selectedApps }) {
   const [open, setOpen] = useState(false)
@@ -112,7 +113,7 @@ function SearchDropdown({ candidates, loading, query, setQuery, onSearch, onSele
   return (
     <div ref={ref} className="search-container">
       <form onSubmit={submit}>
-        <Field label="Search apps">
+        <Field label="Search Google Play">
           <div className="search-input-row">
             <Input
               value={query}
@@ -179,65 +180,123 @@ function SelectedApps({ apps, onRemove }) {
   )
 }
 
-// ─── Analysis panel ───────────────────────────────────────────────
+// ─── iOS screenshot upload ────────────────────────────────────────
 
-function AnalysisStats({ data }) {
-  const { reviews } = data
-  const total   = reviews.length
-  const avg     = total ? (reviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(1) : '—'
-  const pos     = reviews.filter(r => r.sentiment_label === 'positive').length
-  const neg     = reviews.filter(r => r.sentiment_label === 'negative').length
-  const ios     = reviews.filter(r => r.platform === 'ios').length
-  const android = reviews.filter(r => r.platform === 'android').length
-
-  const stats = [
-    { value: total, label: 'Reviews' },
-    { value: avg, label: 'Avg rating' },
-    { value: `${Math.round(pos / total * 100)}%`, label: 'Positive' },
-    { value: `${Math.round(neg / total * 100)}%`, label: 'Negative' },
-    ...(ios && android ? [
-      { value: ios, label: 'App Store' },
-      { value: android, label: 'Google Play' },
-    ] : []),
-  ]
+function IosUploadSection({ iosInput, setIosInput, iosParsing, iosParseError, onParse, iosApps, onRemove }) {
+  const fileRef = useRef(null)
 
   return (
-    <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}>
-      {stats.map(s => (
-        <div key={s.label} className="stat-item">
-          <div className="stat-value">{s.value}</div>
-          <div className="stat-label">{s.label}</div>
+    <div className="sidebar-form">
+      <p className="ios-upload__label">Add iOS App (App Store screenshots)</p>
+
+      <Field label="App name">
+        <Input
+          value={iosInput.name}
+          onChange={e => setIosInput(v => ({ ...v, name: e.target.value }))}
+          placeholder="e.g. Grab, Uber…"
+        />
+      </Field>
+
+      <Field label="Screenshots">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="file-input"
+          onChange={e => setIosInput(v => ({ ...v, files: Array.from(e.target.files) }))}
+        />
+      </Field>
+
+      {iosInput.files.length > 0 && (
+        <Note variant="muted">{iosInput.files.length} file{iosInput.files.length > 1 ? 's' : ''} selected</Note>
+      )}
+
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={iosParsing || !iosInput.name.trim() || !iosInput.files.length}
+        onClick={onParse}
+      >
+        {iosParsing ? 'Parsing screenshots…' : 'Parse Screenshots'}
+      </Button>
+
+      {iosParseError && <Note variant="error">{iosParseError}</Note>}
+
+      {iosApps.length > 0 && (
+        <div className="selected-apps">
+          <p className="selected-apps__label">iOS apps added</p>
+          <div className="selected-chips">
+            {iosApps.map(app => (
+              <div key={app.app_id} className="selected-chip">
+                <AppIcon src="" name={app.name} size={30} />
+                <div className="selected-chip__info">
+                  <span className="selected-chip__name">{app.name}</span>
+                  <Badge variant="blue">App Store</Badge>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{app.reviews.length} reviews</span>
+                </div>
+                <button className="selected-chip__remove" onClick={() => onRemove(app)} aria-label="Remove">×</button>
+              </div>
+            ))}
+          </div>
         </div>
-      ))}
+      )}
     </div>
   )
 }
 
-function SentimentDistribution({ reviews }) {
-  const total = reviews.length
-  if (!total) return null
-  const pos = reviews.filter(r => r.sentiment_label === 'positive').length
-  const neu = reviews.filter(r => r.sentiment_label === 'neutral').length
-  const neg = reviews.filter(r => r.sentiment_label === 'negative').length
-  const pct = n => Math.round(n / total * 100)
+// ─── Scorecard ────────────────────────────────────────────────────
+
+function ScoreMetric({ label, value, color }) {
+  return (
+    <div className="score-metric">
+      <span className="score-metric__label">{label}</span>
+      <span className="score-metric__value" style={color ? { color } : {}}>{value}</span>
+    </div>
+  )
+}
+
+function Scorecard({ byApp }) {
+  const entries = Object.values(byApp)
+  if (!entries.length) return null
 
   return (
-    <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-      <div className="stat-item stat-item--positive">
-        <div className="stat-value" style={{ color: 'var(--green)' }}>{pos}</div>
-        <div className="stat-label">Positive · {pct(pos)}%</div>
-      </div>
-      <div className="stat-item">
-        <div className="stat-value" style={{ color: 'var(--text-muted)' }}>{neu}</div>
-        <div className="stat-label">Neutral · {pct(neu)}%</div>
-      </div>
-      <div className="stat-item stat-item--negative">
-        <div className="stat-value" style={{ color: 'var(--red)' }}>{neg}</div>
-        <div className="stat-label">Negative · {pct(neg)}%</div>
+    <div className="scorecard">
+      <div className="scorecard__apps">
+        {entries.map(({ app, reviews }) => {
+          const total   = reviews.length
+          const avgRating    = total ? reviews.reduce((s, r) => s + r.rating, 0) / total : 0
+          const pos     = reviews.filter(r => r.sentiment_label === 'positive').length
+          const neg     = reviews.filter(r => r.sentiment_label === 'negative').length
+          const neu     = reviews.filter(r => r.sentiment_label === 'neutral').length
+          const avgSent = total ? reviews.reduce((s, r) => s + (r.sentiment_score ?? 0), 0) / total : 0
+
+          return (
+            <div key={app.app_id} className="scorecard__col">
+              <div className="scorecard__app-header">
+                <AppIcon src={app.icon} name={app.name} size={32} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="scorecard__app-name">{app.name}</div>
+                  <Badge variant={PLATFORM_COLORS[app.platform]}>{PLATFORM_LABELS[app.platform]}</Badge>
+                </div>
+              </div>
+              <div className="scorecard__metrics">
+                <ScoreMetric label="Reviews"      value={total.toLocaleString()} />
+                <ScoreMetric label="Avg Rating"   value={total ? avgRating.toFixed(1) : '—'} />
+                <ScoreMetric label="Positive"     value={total ? `${Math.round(pos / total * 100)}%` : '—'} color="var(--green)" />
+                <ScoreMetric label="Neutral"      value={total ? `${Math.round(neu / total * 100)}%` : '—'} color="var(--text-muted)" />
+                <ScoreMetric label="Negative"     value={total ? `${Math.round(neg / total * 100)}%` : '—'} color="var(--red)" />
+                <ScoreMetric label="Avg Sentiment" value={total ? (avgSent >= 0 ? '+' : '') + avgSent.toFixed(3) : '—'} />
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
+
+// ─── Per-app review breakdown with dropdown ───────────────────────
 
 function ReviewTable({ reviews, filename = 'reviews.csv' }) {
   return (
@@ -248,45 +307,43 @@ function ReviewTable({ reviews, filename = 'reviews.csv' }) {
           Download CSV
         </Button>
       </div>
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Review</th>
-            <th>Rating</th>
-            <th>Sentiment</th>
-            <th>Date</th>
-            <th>Platform</th>
-            <th>Version</th>
-          </tr>
-        </thead>
-        <tbody>
-          {reviews.map((r, idx) => {
-            const sv = r.sentiment_label === 'positive' ? 'green' : r.sentiment_label === 'negative' ? 'red' : 'default'
-            const sign = r.sentiment_score > 0 ? '+' : ''
-            return (
-              <tr key={`${r.platform ?? ''}-${r.review_id ?? idx}-${r.date ?? ''}`}>
-                <td>{r.review_text}</td>
-                <td>{r.rating} / 5</td>
-                <td>
-                  <div className="sentiment-cell">
-                    <Badge variant={sv}>{r.sentiment_label ?? '—'}</Badge>
-                    {r.sentiment_score != null && (
-                      <span className={`sentiment-score sentiment-${r.sentiment_label ?? 'neutral'}`}>
-                        {sign}{r.sentiment_score}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td>{r.date ?? '—'}</td>
-                <td><Badge variant={PLATFORM_COLORS[r.platform]}>{PLATFORM_LABELS[r.platform]}</Badge></td>
-                <td>{r.version ?? '—'}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Review</th>
+              <th>Rating</th>
+              <th>Sentiment</th>
+              <th>Date</th>
+              <th>Version</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reviews.map((r, idx) => {
+              const sv   = r.sentiment_label === 'positive' ? 'green' : r.sentiment_label === 'negative' ? 'red' : 'default'
+              const sign = r.sentiment_score > 0 ? '+' : ''
+              return (
+                <tr key={`${r.platform ?? ''}-${r.review_id ?? idx}-${r.date ?? ''}`}>
+                  <td>{r.review_text}</td>
+                  <td>{r.rating} / 5</td>
+                  <td>
+                    <div className="sentiment-cell">
+                      <Badge variant={sv}>{r.sentiment_label ?? '—'}</Badge>
+                      {r.sentiment_score != null && (
+                        <span className={`sentiment-score sentiment-${r.sentiment_label ?? 'neutral'}`}>
+                          {sign}{r.sentiment_score}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td>{r.date ?? '—'}</td>
+                  <td>{r.version ?? '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -300,38 +357,100 @@ function AggregationTable({ data, filename = 'aggregation.csv' }) {
           Download CSV
         </Button>
       </div>
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Month</th>
-            <th>Reviews</th>
-            <th>Avg Rating</th>
-            <th>Avg Sentiment</th>
-            <th>Positive</th>
-            <th>Neutral</th>
-            <th>Negative</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map(row => {
-            const sc = row.avg_sentiment >= 0.05 ? 'positive' : row.avg_sentiment <= -0.05 ? 'negative' : 'neutral'
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Reviews</th>
+              <th>Avg Rating</th>
+              <th>Avg Sentiment</th>
+              <th>Positive</th>
+              <th>Neutral</th>
+              <th>Negative</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map(row => {
+              const sc = row.avg_sentiment >= 0.05 ? 'positive' : row.avg_sentiment <= -0.05 ? 'negative' : 'neutral'
+              return (
+                <tr key={row.period}>
+                  <td>{row.period}</td>
+                  <td>{row.review_count}</td>
+                  <td>{row.avg_rating}</td>
+                  <td className={`sentiment-${sc}`}>{row.avg_sentiment > 0 ? '+' : ''}{row.avg_sentiment}</td>
+                  <td style={{ color: 'var(--green)' }}>{row.positive_count}</td>
+                  <td style={{ color: 'var(--text-muted)' }}>{row.neutral_count}</td>
+                  <td style={{ color: 'var(--red)' }}>{row.negative_count}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function ReviewDropdown({ byApp, progress }) {
+  const keys = Object.keys(byApp)
+  const [selected, setSelected] = useState(keys[0] ?? '')
+  const effectiveKey = keys.includes(selected) ? selected : (keys[0] ?? '')
+  const appData = byApp[effectiveKey]
+
+  if (!appData) return null
+
+  const { app, reviews, aggregation } = appData
+  const inProgress = progress[effectiveKey]
+  const baseName   = `${app.name}-${app.platform}`
+
+  return (
+    <Card>
+      <CardHeader step="Reviews" title="Review breakdown" subtitle="Select an app to explore its reviews." />
+
+      <div className="app-select-row">
+        <select
+          className="app-select"
+          value={effectiveKey}
+          onChange={e => setSelected(e.target.value)}
+        >
+          {keys.map(k => {
+            const a = byApp[k].app
+            const cnt = byApp[k].reviews.length
             return (
-              <tr key={row.period}>
-                <td>{row.period}</td>
-                <td>{row.review_count}</td>
-                <td>{row.avg_rating}</td>
-                <td className={`sentiment-${sc}`}>{row.avg_sentiment > 0 ? '+' : ''}{row.avg_sentiment}</td>
-                <td style={{ color: 'var(--green)' }}>{row.positive_count}</td>
-                <td style={{ color: 'var(--text-muted)' }}>{row.neutral_count}</td>
-                <td style={{ color: 'var(--red)' }}>{row.negative_count}</td>
-              </tr>
+              <option key={k} value={k}>
+                {a.name} · {PLATFORM_LABELS[a.platform]} · {cnt.toLocaleString()} reviews{progress[k] && byApp[k].reviews.length === 0 ? ` (loading…)` : ''}
+              </option>
             )
           })}
-        </tbody>
-      </table>
-    </div>
-    </div>
+        </select>
+      </div>
+
+      {inProgress !== undefined && (
+        <Note variant="muted" style={{ marginBottom: 12 }}>
+          Streaming… {inProgress.toLocaleString()} reviews loaded so far
+        </Note>
+      )}
+
+      {aggregation.length > 0 && (
+        <>
+          <SentimentTrendChart
+            data={aggregation}
+            color={PLATFORM_CHART_COLOR[app.platform]}
+            filename={`${baseName}-sentiment.png`}
+          />
+          <Divider />
+          <AggregationTable data={aggregation} filename={`${baseName}-monthly.csv`} />
+          <Divider />
+        </>
+      )}
+
+      {reviews.length > 0 ? (
+        <ReviewTable reviews={reviews} filename={`${baseName}-reviews.csv`} />
+      ) : (
+        <Note variant="muted">No reviews yet for this app.</Note>
+      )}
+    </Card>
   )
 }
 
@@ -346,6 +465,11 @@ export default function App() {
   const [analysisState, setAnalysisState] = useState({ loading: false, error: '', progress: {} })
   const [analysisData, setAnalysisData]   = useState(null)
   const streamsRef = useRef([])
+
+  const [iosInput, setIosInput]           = useState({ name: '', files: [] })
+  const [iosParsing, setIosParsing]       = useState(false)
+  const [iosParseError, setIosParseError] = useState('')
+  const [iosApps, setIosApps]             = useState([])
 
   function closeStreams() {
     streamsRef.current.forEach(es => es.close())
@@ -372,8 +496,8 @@ export default function App() {
 
   function handleSelect(app) {
     setSelectedApps(prev => {
-      const rest = prev.filter(a => a.platform !== app.platform)
-      return [...rest, app]
+      if (prev.some(a => a.app_id === app.app_id && a.platform === app.platform)) return prev
+      return [...prev, app]
     })
   }
 
@@ -381,18 +505,64 @@ export default function App() {
     setSelectedApps(prev => prev.filter(a => !(a.app_id === app.app_id && a.platform === app.platform)))
   }
 
+  function handleRemoveIos(app) {
+    setIosApps(prev => prev.filter(a => a.app_id !== app.app_id))
+  }
+
+  async function handleParseIos() {
+    const name = iosInput.name.trim()
+    if (!name || !iosInput.files.length) return
+    setIosParsing(true)
+    setIosParseError('')
+    try {
+      const formData = new FormData()
+      formData.append('app_name', name)
+      for (const f of iosInput.files) formData.append('screenshots', f)
+      const res  = await fetch('/api/ios/parse', { method: 'POST', body: formData })
+      const data = await safeJson(res, 'iOS parse failed')
+      if (!res.ok) throw new Error(data.error || 'Parse failed')
+      const appId = `ios_${Date.now()}`
+      const taggedReviews = (data.reviews ?? []).map(r => ({ ...r, app_id: appId }))
+      setIosApps(prev => {
+        const filtered = prev.filter(a => a.name.toLowerCase() !== name.toLowerCase())
+        return [...filtered, { app_id: appId, name, platform: 'ios', reviews: taggedReviews, icon: '', store: 'App Store' }]
+      })
+      setIosInput({ name: '', files: [] })
+    } catch (err) {
+      setIosParseError(err.message || 'Failed to parse screenshots')
+    } finally {
+      setIosParsing(false)
+    }
+  }
+
   function handleAnalyse() {
-    if (!selectedApps.length) return
+    const allApps = [...selectedApps, ...iosApps]
+    if (!allApps.length) return
     closeStreams()
+
+    // Pre-seed with iOS reviews
+    const initByApp = {}
+    let initReviews = []
+    for (const app of iosApps) {
+      initByApp[app.app_id] = { app, reviews: app.reviews, aggregation: aggregateClientSide(app.reviews) }
+      initReviews = [...initReviews, ...app.reviews]
+    }
+    const initData = { apps: allApps, reviews: initReviews, byApp: initByApp, aggregation: aggregateClientSide(initReviews) }
+
+    if (!selectedApps.length) {
+      setAnalysisData(initData)
+      setAnalysisState({ loading: false, error: '', progress: {} })
+      return
+    }
+
     setAnalysisState({ loading: true, error: '', progress: {} })
-    setAnalysisData(null)
+    setAnalysisData(initReviews.length ? initData : null)
 
     let doneCount = 0
-    const total = selectedApps.length
 
     function onStreamDone() {
       doneCount++
-      if (doneCount >= total) {
+      if (doneCount >= selectedApps.length) {
         setAnalysisState(s => ({ ...s, loading: false }))
       }
     }
@@ -406,27 +576,28 @@ export default function App() {
       streamsRef.current.push(es)
 
       es.addEventListener('batch', e => {
-        const { reviews } = JSON.parse(e.data)
-        if (!reviews?.length) return
+        const { reviews: raw } = JSON.parse(e.data)
+        if (!raw?.length) return
+        const reviews = raw.map(r => ({ ...r, app_id: app.app_id }))
 
         setAnalysisState(s => ({
           ...s,
-          progress: { ...s.progress, [app.platform]: (s.progress[app.platform] ?? 0) + reviews.length },
+          progress: { ...s.progress, [app.app_id]: (s.progress[app.app_id] ?? 0) + reviews.length },
         }))
 
         setAnalysisData(prev => {
-          const existing    = prev?.byPlatform?.[app.platform]?.reviews ?? []
-          const merged      = [...existing, ...reviews]
-          const otherReviews = (prev?.reviews ?? []).filter(r => r.platform !== app.platform)
-          const allReviews   = [...otherReviews, ...merged]
+          const prevAppReviews = prev?.byApp?.[app.app_id]?.reviews ?? []
+          const merged         = [...prevAppReviews, ...reviews]
+          const others         = (prev?.reviews ?? []).filter(r => r.app_id !== app.app_id)
+          const all            = [...others, ...merged]
           return {
-            apps: selectedApps,
-            reviews: allReviews,
-            byPlatform: {
-              ...(prev?.byPlatform ?? {}),
-              [app.platform]: { reviews: merged, aggregation: aggregateClientSide(merged) },
+            apps: allApps,
+            reviews: all,
+            byApp: {
+              ...(prev?.byApp ?? initByApp),
+              [app.app_id]: { app, reviews: merged, aggregation: aggregateClientSide(merged) },
             },
-            aggregation: aggregateClientSide(allReviews),
+            aggregation: aggregateClientSide(all),
           }
         })
       })
@@ -435,31 +606,27 @@ export default function App() {
         try {
           const { message } = JSON.parse(e.data)
           setAnalysisState(s => ({ ...s, error: s.error ? `${s.error}; ${message}` : message }))
-        } catch { /* connection error — no data property */ }
+        } catch { /* connection error */ }
         es.close()
         onStreamDone()
       })
 
-      es.addEventListener('done', () => {
-        es.close()
-        onStreamDone()
-      })
-
-      // network-level failure (server down, etc.)
-      es.onerror = () => {
-        es.close()
-        onStreamDone()
-      }
+      es.addEventListener('done', () => { es.close(); onStreamDone() })
+      es.onerror = () => { es.close(); onStreamDone() }
     }
   }
 
-  const canAnalyse = selectedApps.length > 0 && !analysisState.loading
+  const canAnalyse      = (selectedApps.length > 0 || iosApps.length > 0) && !analysisState.loading
+  const allSelectedApps = [...selectedApps, ...iosApps]
+
+  // Map app_id → app name for progress banner
+  const appById = Object.fromEntries(allSelectedApps.map(a => [a.app_id, a]))
 
   return (
     <div className="app-shell">
       <header className="page-header">
         <h1>App Review Intelligence</h1>
-        <p>Search, select one or both platforms, then analyse sentiment over time.</p>
+        <p>Compare Google Play apps side-by-side, or add iOS apps via App Store screenshots.</p>
       </header>
 
       <div className="workspace">
@@ -467,7 +634,7 @@ export default function App() {
         {/* ── Sidebar ── */}
         <aside>
           <Card>
-            <CardHeader title="Configure" subtitle="Select the app and date range to analyse." />
+            <CardHeader title="Configure" subtitle="Select apps and date range to analyse." />
 
             <div className="sidebar-form">
               <SearchDropdown
@@ -493,6 +660,18 @@ export default function App() {
 
               <Divider />
 
+              <IosUploadSection
+                iosInput={iosInput}
+                setIosInput={setIosInput}
+                iosParsing={iosParsing}
+                iosParseError={iosParseError}
+                onParse={handleParseIos}
+                iosApps={iosApps}
+                onRemove={handleRemoveIos}
+              />
+
+              <Divider />
+
               <div className="date-row">
                 <Field label="Start date">
                   <Input type="date" value={dateRange.start} onChange={e => setDateRange(d => ({ ...d, start: e.target.value }))} />
@@ -502,7 +681,7 @@ export default function App() {
                 </Field>
               </div>
 
-              {selectedApps.length > 0 && (
+              {allSelectedApps.length > 0 && (
                 <>
                   <Button
                     variant="primary"
@@ -510,7 +689,9 @@ export default function App() {
                     disabled={!canAnalyse}
                     onClick={handleAnalyse}
                   >
-                    {analysisState.loading ? 'Analysing…' : `Analyse${selectedApps.length > 1 ? ` (${selectedApps.length} apps)` : ''}`}
+                    {analysisState.loading
+                      ? 'Analysing…'
+                      : `Analyse${allSelectedApps.length > 1 ? ` (${allSelectedApps.length} apps)` : ''}`}
                   </Button>
 
                   {analysisState.error && (
@@ -527,10 +708,10 @@ export default function App() {
           {!analysisData && analysisState.loading ? (
             <div className="analysis-loading">
               <div>
-                <Spinner label={`Fetching reviews for ${selectedApps.map(a => a.name).join(' + ')}…`} />
-                {Object.entries(analysisState.progress).map(([platform, count]) => (
-                  <p key={platform} className="stream-progress-line">
-                    {PLATFORM_LABELS[platform]}: {count.toLocaleString()} reviews loaded
+                <Spinner label={`Fetching reviews for ${selectedApps.map(a => a.name).join(', ')}…`} />
+                {Object.entries(analysisState.progress).map(([id, count]) => (
+                  <p key={id} className="stream-progress-line">
+                    {appById[id]?.name ?? id}: {count.toLocaleString()} reviews loaded
                   </p>
                 ))}
               </div>
@@ -539,7 +720,7 @@ export default function App() {
             <div className="analysis-empty">
               <span className="analysis-empty__icon">📊</span>
               <p className="analysis-empty__title">Nothing to show yet</p>
-              <p className="analysis-empty__body">Search for an app on the left, select App Store and/or Google Play, then click Analyse.</p>
+              <p className="analysis-empty__body">Search for Google Play apps or add iOS screenshots, then click Analyse.</p>
             </div>
           ) : (
             <>
@@ -550,8 +731,8 @@ export default function App() {
                     <span>Loading more reviews…</span>
                   </div>
                   <div className="stream-banner__counts">
-                    {Object.entries(analysisState.progress).map(([platform, count]) => (
-                      <span key={platform}>{PLATFORM_LABELS[platform]}: <strong>{count.toLocaleString()}</strong></span>
+                    {Object.entries(analysisState.progress).map(([id, count]) => (
+                      <span key={id}>{appById[id]?.name ?? id}: <strong>{count.toLocaleString()}</strong></span>
                     ))}
                   </div>
                 </div>
@@ -559,46 +740,13 @@ export default function App() {
 
               <Card>
                 <CardHeader
-                  title={analysisData.apps.map(a => a.name).filter((v,i,a)=>a.indexOf(v)===i).join(' + ')}
-                  subtitle={`${analysisData.reviews.length} reviews · ${dateRange.start} to ${dateRange.end}`}
+                  title="Overview"
+                  subtitle={`${analysisData.reviews.length} total reviews · ${dateRange.start} to ${dateRange.end}`}
                 />
-                <AnalysisStats data={analysisData} />
+                <Scorecard byApp={analysisData.byApp} />
               </Card>
 
-              <Card>
-                <CardHeader
-                  step="Sentiment"
-                  title="Sentiment over time"
-                  subtitle="VADER compound score per review, aggregated by month."
-                />
-                <SentimentDistribution reviews={analysisData.reviews} />
-                <Divider />
-                <SentimentTrendChart
-                  ios={analysisData.byPlatform.ios?.aggregation}
-                  android={analysisData.byPlatform.android?.aggregation}
-                  filename={`${analysisData.apps.map(a => a.name).filter((v,i,a)=>a.indexOf(v)===i).join('-')}-sentiment.png`}
-                />
-                {analysisData.aggregation.length > 0 && (
-                  <div className="mt-md">
-                    <AggregationTable
-                      data={analysisData.aggregation}
-                      filename={`${analysisData.apps.map(a => a.name).filter((v,i,a)=>a.indexOf(v)===i).join('-')}-monthly.csv`}
-                    />
-                  </div>
-                )}
-              </Card>
-
-              <Card>
-                <CardHeader
-                  step="Reviews"
-                  title={`All ${analysisData.reviews.length} reviews`}
-                  subtitle="Cleaned, deduplicated, and sentiment-scored."
-                />
-                <ReviewTable
-                  reviews={analysisData.reviews}
-                  filename={`${analysisData.apps.map(a => a.name).filter((v,i,a)=>a.indexOf(v)===i).join('-')}-reviews.csv`}
-                />
-              </Card>
+              <ReviewDropdown byApp={analysisData.byApp} progress={analysisState.progress} />
             </>
           )}
         </main>

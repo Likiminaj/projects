@@ -46,7 +46,6 @@ async function downloadChartAsPng(containerEl, filename = 'chart.png') {
   a.click()
 }
 
-const IOS_COLOR     = '#2563EB'
 const ANDROID_COLOR = '#16A34A'
 const TICK_COLOR    = '#A09488'
 const GRID_COLOR    = 'rgba(0,0,0,0.06)'
@@ -88,25 +87,6 @@ function ChartTooltip({ active, payload }) {
   )
 }
 
-function mergeTimeSeries(ios, android) {
-  const periods = new Set([
-    ...(ios     ?? []).map(d => d.period),
-    ...(android ?? []).map(d => d.period),
-  ])
-  const iosMap     = Object.fromEntries((ios     ?? []).map(d => [d.period, d]))
-  const androidMap = Object.fromEntries((android ?? []).map(d => [d.period, d]))
-
-  return [...periods]
-    .sort()
-    .map(period => ({
-      period,
-      ios_sentiment:     iosMap[period]?.avg_sentiment  ?? null,
-      android_sentiment: androidMap[period]?.avg_sentiment ?? null,
-      ios_count:         iosMap[period]?.review_count   ?? 0,
-      android_count:     androidMap[period]?.review_count ?? 0,
-    }))
-}
-
 function Legend({ platforms }) {
   return (
     <div className="chart-legend">
@@ -125,80 +105,16 @@ const axisProps = {
   tickLine: false,
 }
 
-export function SentimentTrendChart({ ios, android, filename = 'sentiment-chart.png' }) {
-  const chartRef   = useRef(null)
-  const hasIos     = ios?.length     > 0
-  const hasAndroid = android?.length > 0
+export function SentimentTrendChart({ data, color = ANDROID_COLOR, filename = 'sentiment-chart.png' }) {
+  const chartRef = useRef(null)
 
-  if (!hasIos && !hasAndroid) {
+  if (!data?.length) {
     return (
       <Note variant="muted">
-        No dated reviews in range — try a wider date range or a different platform.
+        No dated reviews in range — try a wider date range.
       </Note>
     )
   }
-
-  const both = hasIos && hasAndroid
-
-  if (both) {
-    const merged = mergeTimeSeries(ios, android)
-    return (
-      <div ref={chartRef}>
-        <div className="section-row">
-          <Legend platforms={[
-            { label: 'App Store',   color: IOS_COLOR },
-            { label: 'Google Play', color: ANDROID_COLOR },
-          ]} />
-          <Button variant="ghost" size="sm" onClick={() => downloadChartAsPng(chartRef.current, filename)}>
-            Download PNG
-          </Button>
-        </div>
-
-        <div className="chart-outer">
-          <p className="chart-label">Avg sentiment over time</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={merged} margin={{ top: 4, right: 12, bottom: 0, left: -16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-              <XAxis dataKey="period" {...axisProps} />
-              <YAxis domain={[-1, 1]} ticks={[-1, -0.5, 0, 0.5, 1]} {...axisProps} axisLine={false} />
-              <Tooltip content={<ChartTooltip />} cursor={{ stroke: CURSOR_LINE }} />
-              <ReferenceLine y={0} stroke={REF_COLOR} strokeDasharray="4 4" />
-              <Line
-                type="monotone" dataKey="ios_sentiment" name="App Store"
-                stroke={IOS_COLOR} strokeWidth={2.5} connectNulls
-                dot={{ fill: IOS_COLOR, r: 4, strokeWidth: 0 }}
-                activeDot={{ r: 6, fill: IOS_COLOR, strokeWidth: 0 }}
-              />
-              <Line
-                type="monotone" dataKey="android_sentiment" name="Google Play"
-                stroke={ANDROID_COLOR} strokeWidth={2.5} connectNulls
-                dot={{ fill: ANDROID_COLOR, r: 4, strokeWidth: 0 }}
-                activeDot={{ r: 6, fill: ANDROID_COLOR, strokeWidth: 0 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="chart-outer">
-          <p className="chart-label">Review volume</p>
-          <ResponsiveContainer width="100%" height={100}>
-            <BarChart data={merged} margin={{ top: 4, right: 12, bottom: 0, left: -16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-              <XAxis dataKey="period" {...axisProps} />
-              <YAxis {...axisProps} axisLine={false} allowDecimals={false} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: CURSOR_FILL }} />
-              <Bar dataKey="ios_count"     name="App Store"   fill={IOS_COLOR}     fillOpacity={0.55} radius={[3, 3, 0, 0]} />
-              <Bar dataKey="android_count" name="Google Play" fill={ANDROID_COLOR} fillOpacity={0.55} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    )
-  }
-
-  // Single platform
-  const data  = hasIos ? ios : android
-  const color = hasIos ? IOS_COLOR : ANDROID_COLOR
 
   return (
     <div ref={chartRef}>
