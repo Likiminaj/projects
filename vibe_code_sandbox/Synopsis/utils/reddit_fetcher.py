@@ -125,8 +125,10 @@ def flatten_comments(comment_list: list, thread_title: str, subreddit: str,
         # Strip Reddit markdown syntax so plain text is stored
         body = _strip_markdown(body)
 
-        # Skip only truly empty comments or ones whose body is [deleted]/[removed]
+        # Skip empty, deleted, removed, or Reddit poll result lines
         if not body or body.lower() in ("[deleted]", "[removed]"):
+            continue
+        if re.search(r"\d+%\s+voted\s+for\s+this", body, re.IGNORECASE):
             continue
 
         # Convert Unix timestamp to a readable UTC datetime string

@@ -248,6 +248,16 @@ STOPWORDS = {
     "looking", "tried", "try", "trying", "put", "keep", "keeps", "let", "get",
     "getting", "give", "gives", "gave", "tell", "tells", "take", "takes", "took",
     "need", "needs", "feel", "feels", "felt", "point", "take", "people",
+    # Generic sentiment / filler words that leak into theme names
+    "better", "worse", "best", "worst", "great", "terrible", "awful", "amazing",
+    "tiring", "tired", "boring", "bored", "hard", "easy", "difficult", "simple",
+    "big", "small", "high", "low", "long", "short", "old", "young", "different",
+    "sure", "true", "false", "agree", "disagree", "mean", "meant", "matter",
+    "pretty", "quite", "rather", "enough", "least", "least", "already", "though",
+    "every", "anyone", "everyone", "someone", "something", "anything", "nothing",
+    "another", "others", "next", "last", "whole", "part", "kind", "sort", "type",
+    "place", "time", "day", "year", "years", "month", "week", "life", "world",
+    "country", "government", "people", "person", "man", "woman", "side", "end",
 }
 
 def _extract_theme_keywords(comments: list) -> dict:
@@ -260,50 +270,56 @@ def _extract_theme_keywords(comments: list) -> dict:
     if not comments:
         return {}
 
-    vectorizer = TfidfVectorizer(
-        max_features=50,
-        stop_words=list(STOPWORDS),
-        ngram_range=(1, 2),
-        min_df=1,
-        max_df=0.8,
-    )
+    signal = "strong" if len(comments) >= 10 else "moderate" if len(comments) >= 5 else "emerging"
 
-    try:
-        tfidf_matrix = vectorizer.fit_transform(comments)
-        feature_names = vectorizer.get_feature_names_out()
-        scores = tfidf_matrix.sum(axis=0).A1
+    # Try bigrams first for richer labels, fall back to unigrams
+    for ngram_range in [(2, 3), (1, 2)]:
+        try:
+            vectorizer = TfidfVectorizer(
+                max_features=80,
+                stop_words=list(STOPWORDS),
+                ngram_range=ngram_range,
+                min_df=1,
+                max_df=0.95,
+                token_pattern=r"(?u)\b[a-zA-Z][a-zA-Z]+\b",  # skip pure numbers
+            )
+            tfidf_matrix = vectorizer.fit_transform(comments)
+            feature_names = vectorizer.get_feature_names_out()
+            scores = tfidf_matrix.sum(axis=0).A1
+            ranked = sorted(zip(feature_names, scores), key=lambda x: x[1], reverse=True)
 
-        ranked = sorted(zip(feature_names, scores), key=lambda x: x[1], reverse=True)
+            # Filter out single-character tokens and pure stopwords
+            top_keywords = [
+                kw for kw, _ in ranked
+                if len(kw) > 3 and not all(w in STOPWORDS for w in kw.split())
+            ][:5]
 
-        top_keywords = [kw for kw, _ in ranked[:5]]
+            if top_keywords:
+                break
+        except Exception:
+            top_keywords = []
 
-        if len(top_keywords) >= 3:
-            theme_name = " / ".join(top_keywords[:3]).title()
-        elif top_keywords:
-            theme_name = top_keywords[0].title()
-        else:
-            theme_name = "General"
-
-        theme_description = f"Comments about {', '.join(top_keywords[:4])}."
-
-        top_comment = max(comments, key=lambda c: len(c))[:200]
-        signal = "strong" if len(comments) >= 10 else "moderate" if len(comments) >= 5 else "emerging"
-
+    if not top_keywords:
         return {
-            "theme_name": theme_name,
-            "theme_description": theme_description,
-            "research_takeaway": f"Users express interest or concern about {top_keywords[0] if top_keywords else 'this topic'}.",
-            "product_implication": f"Consider addressing {top_keywords[0] if top_keywords else 'this theme'} based on user feedback.",
-            "signal_strength": signal,
-        }
-    except Exception:
-        return {
-            "theme_name": "General",
-            "theme_description": "A cluster of related comments.",
+            "theme_name": "Uncategorised",
+            "theme_description": "Comments with no clear common topic.",
             "research_takeaway": "",
             "product_implication": "",
-            "signal_strength": "moderate",
+            "signal_strength": signal,
         }
+
+    # Prefer the top bigram/trigram as the label; pad with unigrams if needed
+    primary = top_keywords[0].title()
+    secondary = [kw.title() for kw in top_keywords[1:3] if kw not in top_keywords[0]]
+    theme_name = primary + (f" & {secondary[0]}" if secondary else "")
+
+    return {
+        "theme_name": theme_name,
+        "theme_description": f"Comments discussing {', '.join(top_keywords[:4])}.",
+        "research_takeaway": f"Recurring discussion around '{top_keywords[0]}' suggests this is a significant concern.",
+        "product_implication": f"Focus on '{top_keywords[0]}' as a high-signal area from user feedback.",
+        "signal_strength": signal,
+    }
 
 
 def label_clusters(

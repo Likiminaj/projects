@@ -439,12 +439,17 @@ main {
 
 .modal-actions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   margin-top: 8px;
-  flex-wrap: wrap;
 }
-.modal-actions .btn-ghost { font-size: 13.5px; padding: 8px 16px; }
+.modal-actions .btn-ghost,
+.modal-actions .btn-analyze {
+  width: 100%;
+  font-size: 13.5px;
+  padding: 10px 16px;
+  text-align: center;
+}
 
 /* ------------------------------------------------------------------ */
 /* Results page layout                                                 */

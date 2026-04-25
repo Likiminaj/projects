@@ -3,7 +3,7 @@ thematic_coder.py
 -----------------
 Semantic thematic coding engine for Reddit comment datasets.
 
-Uses Claude (claude-opus-4-6 with adaptive thinking) to identify meaningful
+Uses a local Ollama model (default: llama3.2) to identify meaningful
 recurring themes based on underlying user intent — not keyword matching.
 
 Comment-level output per comment_id:
@@ -26,21 +26,23 @@ import json
 import os
 from typing import Optional
 
-import anthropic
+from openai import OpenAI
 import pandas as pd
 
-# Cap the number of comments sent to Claude to stay within context limits.
+# Cap the number of comments sent to the model to stay within context limits.
 # We take the highest-upvoted comments so the most signal-rich posts are coded.
 MAX_COMMENTS = 300
 
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
-_client: Optional[anthropic.Anthropic] = None
+_client: Optional[OpenAI] = None
 
 
-def _get_client():  # type: () -> anthropic.Anthropic
+def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic()
+        _client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
     return _client
 
 
@@ -126,18 +128,12 @@ Return a single JSON object — no markdown fences, no text outside the JSON:
 
     try:
         client = _get_client()
-        with client.messages.stream(
-            model="claude-opus-4-6",
-            max_tokens=8000,
-            thinking={"type": "adaptive"},
+        response = client.chat.completions.create(
+            model=OLLAMA_MODEL,
             messages=[{"role": "user", "content": prompt}],
-        ) as stream:
-            final = stream.get_final_message()
-
-        # Extract the text block (thinking blocks are separate)
-        raw = next(
-            (block.text for block in final.content if block.type == "text"), ""
-        ).strip()
+            max_tokens=8000,
+        )
+        raw = response.choices[0].message.content.strip()
 
         # Strip accidental markdown code fences
         if raw.startswith("```"):
