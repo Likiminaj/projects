@@ -1,0 +1,350 @@
+.sectionHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-base);
+  margin-bottom: var(--space-xxl);
+  max-width: 640px;
+}
+
+.sectionDesc {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--color-body);
+  letter-spacing: 0.15px;
+}
+
+/* Grid layouts */
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-base);
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-base);
+}
+
+.grid1 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-base);
+  max-width: 640px;
+}
+
+@media (max-width: 1024px) {
+  .grid3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .grid2, .grid3 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid1 {
+    max-width: 100%;
+  }
+}
+
+/* Github CTA band */
+.githubBand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-base);
+  background-color: var(--color-surface-card);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg) var(--space-xl);
+  margin-top: var(--space-xl);
+  flex-wrap: wrap;
+}
+
+.githubBandText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+}
+
+.githubBandTitle {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.githubBandSub {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* Timeline */
+.timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.timelineItem {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--space-xl);
+  padding: var(--space-lg) 0;
+  border-bottom: 1px solid var(--color-hairline-soft);
+  position: relative;
+}
+
+.timelineItem:last-child {
+  border-bottom: none;
+}
+
+.timelinePeriod {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-muted);
+  letter-spacing: 0.1px;
+  padding-top: 2px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.timelineContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+}
+
+.timelineCompany {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-ink);
+  letter-spacing: 0;
+}
+
+.timelineRole {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--color-body);
+  letter-spacing: 0.1px;
+}
+
+.timelineNote {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-muted);
+  background-color: var(--color-surface-strong);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  margin-top: 2px;
+}
+
+.currentDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background-color: var(--color-semantic-success);
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+@media (max-width: 640px) {
+  .timelineItem {
+    grid-template-columns: 1fr;
+    gap: var(--space-xs);
+  }
+
+  .timelinePeriod {
+    font-size: 12px;
+  }
+}
+
+/* Education */
+.educationList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-base);
+}
+
+.educationItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  padding: var(--space-lg);
+  background-color: var(--color-surface-card);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-xl);
+}
+
+.educationInstitution {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.educationDegree {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--color-body);
+}
+
+.educationNote {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  background-color: var(--color-surface-strong);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  align-self: flex-start;
+}
+
+/* About callout */
+.aboutCallout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xl);
+  background-color: var(--color-surface-card);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-xxl);
+  padding: var(--space-xxl);
+  flex-wrap: wrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.aboutCalloutOrb {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, var(--color-gradient-sky) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(60px);
+  top: -80px;
+  right: -80px;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.aboutCalloutText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-width: 480px;
+  position: relative;
+  z-index: 1;
+}
+
+.aboutCalloutTitle {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: -0.2px;
+  color: var(--color-ink);
+  line-height: 1.2;
+}
+
+.aboutCalloutDesc {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--color-body);
+  line-height: 1.5;
+}
+
+/* Contact section */
+.contactSection {
+  background-color: var(--color-surface-dark);
+  border-radius: var(--radius-xxl);
+  padding: var(--space-xxl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  position: relative;
+  overflow: hidden;
+}
+
+.contactOrb {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--color-gradient-rose) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(80px);
+  bottom: -150px;
+  right: -100px;
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.contactTitle {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 300;
+  letter-spacing: -0.36px;
+  color: var(--color-on-dark);
+  line-height: 1.17;
+}
+
+.contactEmail {
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--color-on-dark-soft);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.contactEmail:hover {
+  color: var(--color-on-dark);
+}
+
+.contactCTA {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background-color: var(--color-on-dark);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 10px 20px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  transition: opacity 0.15s ease;
+  align-self: flex-start;
+  text-decoration: none;
+}
+
+.contactCTA:hover {
+  opacity: 0.85;
+}
+
+@media (max-width: 640px) {
+  .aboutCallout {
+    padding: var(--space-xl);
+  }
+
+  .contactSection {
+    padding: var(--space-xl);
+  }
+
+  .contactTitle {
+    font-size: 26px;
+  }
+}
