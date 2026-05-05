@@ -1,15 +1,17 @@
 CC = cc
-CFLAGS = -Wall -Wextra -Werror
+CFLAGS = -Wall -Wextra -Werror -Iincludes
 
 NAME = philo
 
-SRCS = main.c \
-	parse.c \
-	init.c \
-	routine.c \
-	monitor.c \
-	time.c \
-	cleanup.c
+SRC_DIR = sources
+
+SRCS = $(SRC_DIR)/main.c \
+       $(SRC_DIR)/parse.c \
+       $(SRC_DIR)/init.c \
+       $(SRC_DIR)/routine.c \
+       $(SRC_DIR)/monitor.c \
+       $(SRC_DIR)/time.c \
+       $(SRC_DIR)/cleanup.c
 
 OBJS = $(SRCS:.c=.o)
 
