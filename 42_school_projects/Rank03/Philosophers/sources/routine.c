@@ -1,11 +1,28 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   routine.c                                          :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: lraghave <lraghave@student.42singapore.sg  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/05/05 19:54:14 by lraghave          #+#    #+#             */
+/*   Updated: 2026/05/09 13:46:27 by lraghave         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
 #include "philo.h"
 
-void	print_state(t_philo *philo, char *msg)
+static void	think(t_philo *philo)
 {
-	pthread_mutex_lock(&philo->table->print_lock);
-	if (!is_stopped(philo->table))
-		printf("%ld %d %s\n", elapsed(philo->table), philo->id, msg);
-	pthread_mutex_unlock(&philo->table->print_lock);
+	long	think_time;
+
+	print_state(philo, "is thinking");
+	if (philo->table->count % 2 == 0)
+		return ;
+	think_time = (philo->table->time_to_die
+			- philo->table->time_to_eat
+			- philo->table->time_to_sleep) / 2;
+	if (think_time > 0)
+		smart_sleep(philo->table, think_time);
 }
 
 static void	take_forks(t_philo *philo)
@@ -64,7 +81,7 @@ void	*routine(void *arg)
 		eat(philo);
 		print_state(philo, "is sleeping");
 		smart_sleep(philo->table, philo->table->time_to_sleep);
-		print_state(philo, "is thinking");
+		think(philo);
 	}
 	return (NULL);
 }

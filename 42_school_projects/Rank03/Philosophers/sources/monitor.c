@@ -1,3 +1,14 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   monitor.c                                          :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: lraghave <lraghave@student.42singapore.sg  +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/05/05 19:53:32 by lraghave          #+#    #+#             */
+/*   Updated: 2026/05/05 20:35:15 by lraghave         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
 #include "philo.h"
 
 static int	check_death(t_table *table, int i)
@@ -7,7 +18,7 @@ static int	check_death(t_table *table, int i)
 	pthread_mutex_lock(&table->state_lock);
 	last_meal = table->philos[i].last_meal;
 	pthread_mutex_unlock(&table->state_lock);
-	if (now_ms() - last_meal >= table->time_to_die)
+	if (now_ms() - last_meal > table->time_to_die)
 	{
 		pthread_mutex_lock(&table->print_lock);
 		pthread_mutex_lock(&table->state_lock);
